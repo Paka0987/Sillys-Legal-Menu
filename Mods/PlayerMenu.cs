@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using static Juul.Patches;
 
 namespace Juul
 {
@@ -111,8 +112,7 @@ namespace Juul
 
             Category infoCategory = new Category
             {
-                Name = player.NickName ?? "Player",
-                ParentCategory = playersCategory
+                Name = player.NickName ?? "Player"
             };
 
             infoCategory.Buttons.Add(new Button
@@ -331,3 +331,4 @@ namespace Juul
         }
     }
 }
+

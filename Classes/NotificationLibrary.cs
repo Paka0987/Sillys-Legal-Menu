@@ -1,4 +1,4 @@
-﻿using BepInEx;
+using BepInEx;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -23,16 +23,15 @@ namespace Juul
         private static Texture2D progressBarFill;
         private static Texture2D glowTexture;
 
-        private static Color[] bgPixels;
         private static Color[] pfPixels;
         private const int BG_W = 380;
         private const int BG_H = 90;
-        private const int BG_R = 18;
+        private const int BG_R = 16;
         private const int PF_W = 350;
-        private const int PF_H = 4;
+        private const int PF_H = 6;
 
-        private static readonly Color textWhite = new Color(0.5f, 0.5f, 0.5f, 1f);
-        private static readonly Color textGrey = new Color(0.5f, 0.5f, 0.5f, 1f);
+        private static readonly Color textWhite = new Color(0.98f, 0.98f, 0.98f, 1f);
+        private static readonly Color textGrey = new Color(0.88f, 0.88f, 0.88f, 1f);
         private static readonly List<NotificationUI> activeNotifications = new List<NotificationUI>();
         private static readonly List<ScreenNotification> screenNotifications = new List<ScreenNotification>();
         private const int MAX_NOTIFICATIONS = 2;
@@ -66,23 +65,16 @@ namespace Juul
             var c1 = GetThemeColor(0f);
             var c2 = GetThemeColor(0.5f);
 
-            bgPixels = BuildGradientRoundedRectPixels(BG_W, BG_H, c1, c2, BG_R);
-            bgTexture = new Texture2D(BG_W, BG_H, TextureFormat.RGBA32, false);
-            bgTexture.filterMode = FilterMode.Bilinear;
-            bgTexture.wrapMode = TextureWrapMode.Clamp;
-            bgTexture.SetPixels(bgPixels);
-            bgTexture.Apply(false);
+            bgTexture = CreateRoundedRect(BG_W, BG_H, new Color(0.09f, 0.09f, 0.095f, 0.98f), BG_R);
+            progressBarBg = CreateRoundedRect(PF_W, PF_H, new Color(0.15f, 0.15f, 0.16f, 1f), 3);
 
-            progressBarBg = CreateRoundedRect(PF_W, PF_H, new Color(0.08f, 0.08f, 0.08f, 1f), 2);
-
-            pfPixels = BuildSolidRoundedRectPixels(PF_W, PF_H, c1, 2);
-            progressBarFill = new Texture2D(PF_W, PF_H, TextureFormat.RGBA32, false);
+            progressBarFill = new Texture2D(64, 1, TextureFormat.RGBA32, false);
             progressBarFill.filterMode = FilterMode.Bilinear;
             progressBarFill.wrapMode = TextureWrapMode.Clamp;
-            progressBarFill.SetPixels(pfPixels);
-            progressBarFill.Apply(false);
+            pfPixels = new Color[64];
+            RebuildGradientTextures(c1, c2);
 
-            glowTexture = CreateGlow(BG_W, BG_H, new Color(0.7f, 0.7f, 0.7f, 1f));
+            glowTexture = CreateGlow(BG_W + 20, BG_H + 20, new Color(0f, 0f, 0f, 0.7f));
 
             lastGradColor1 = c1;
             lastGradColor2 = c2;
@@ -150,13 +142,9 @@ namespace Juul
 
         private static void RebuildGradientTextures(Color c1, Color c2)
         {
-            if (bgTexture == null || progressBarFill == null) return;
-
-            bgPixels = BuildGradientRoundedRectPixels(BG_W, BG_H, c1, c2, BG_R);
-            bgTexture.SetPixels(bgPixels);
-            bgTexture.Apply(false);
-
-            pfPixels = BuildSolidRoundedRectPixels(PF_W, PF_H, c1, 2);
+            if (progressBarFill == null) return;
+            for (int i = 0; i < 64; i++)
+                pfPixels[i] = Color.Lerp(c1, c2, i / 63f);
             progressBarFill.SetPixels(pfPixels);
             progressBarFill.Apply(false);
         }
@@ -191,12 +179,11 @@ namespace Juul
 
             Color orig = GUI.color;
 
-            if (notif.State == NotificationState.Displaying)
+            if (notif.Alpha > 0.01f)
             {
-                float pulse = 0.3f + Mathf.Sin(Time.time * 3f) * 0.2f;
-                GUI.color = new Color(1f, 1f, 1f, pulse * notif.Alpha * 0.3f);
-                GUI.DrawTexture(new Rect(x + offsetX - 3f * scale, y + offsetY - 3f * scale,
-                    (NOTIFICATION_WIDTH + 6f) * scale, (NOTIFICATION_HEIGHT + 6f) * scale), glowTexture);
+                GUI.color = new Color(1f, 1f, 1f, notif.Alpha);
+                GUI.DrawTexture(new Rect(x + offsetX - 10f * scale, y + offsetY - 10f * scale,
+                    (NOTIFICATION_WIDTH + 20f) * scale, (NOTIFICATION_HEIGHT + 20f) * scale), glowTexture);
             }
 
             GUI.color = new Color(1f, 1f, 1f, notif.Alpha);
@@ -453,17 +440,17 @@ namespace Juul
             tex.filterMode = FilterMode.Bilinear;
             tex.wrapMode = TextureWrapMode.Clamp;
             Vector2 center = new Vector2(width * 0.5f, height * 0.5f);
-            float maxDist = Mathf.Sqrt(center.x * center.x + center.y * center.y);
+            float rx = center.x, ry = center.y;
             var pixels = new Color[width * height];
             for (int y = 0; y < height; y++)
             {
                 for (int x = 0; x < width; x++)
                 {
-                    float dx = x - center.x, dy = y - center.y;
-                    float dist = Mathf.Sqrt(dx * dx + dy * dy);
-                    float alpha = 1f - Mathf.Clamp01(dist / maxDist);
-                    alpha = alpha * alpha * 0.5f;
-                    pixels[x + y * width] = new Color(color.r, color.g, color.b, alpha);
+                    float dx = Mathf.Abs(x - center.x) / rx;
+                    float dy = Mathf.Abs(y - center.y) / ry;
+                    float d = Mathf.Sqrt(dx * dx * dx * dx + dy * dy * dy * dy);
+                    float alpha = 1f - Mathf.Clamp01(d);
+                    pixels[x + y * width] = new Color(color.r, color.g, color.b, alpha * color.a);
                 }
             }
             tex.SetPixels(pixels);
@@ -538,7 +525,7 @@ namespace Juul
                 glow.sprite = Sprite.Create(glowTexture, new Rect(0, 0, glowTexture.width, glowTexture.height), new Vector2(0.5f, 0.5f));
                 glow.raycastTarget = false;
                 var glowRect = glowObj.GetComponent<RectTransform>();
-                glowRect.sizeDelta = new Vector2(NOTIFICATION_WIDTH + 6, NOTIFICATION_HEIGHT + 6);
+                glowRect.sizeDelta = new Vector2(NOTIFICATION_WIDTH + 20, NOTIFICATION_HEIGHT + 20);
                 glowRect.anchoredPosition = Vector2.zero;
                 glow.color = new Color(1f, 1f, 1f, 0f);
 
@@ -651,13 +638,12 @@ namespace Juul
                 currentAlpha = alpha;
                 if (background != null) background.color = new Color(1f, 1f, 1f, alpha);
                 if (titleText != null) titleText.color = new Color(textWhite.r, textWhite.g, textWhite.b, alpha);
-                if (messageText != null) messageText.color = new Color(textGrey.r, textGrey.g, textGrey.b, alpha * 0.85f);
+                if (messageText != null) messageText.color = new Color(textGrey.r, textGrey.g, textGrey.b, alpha * 0.98f);
                 if (progressBg != null) progressBg.color = new Color(1f, 1f, 1f, alpha * 0.5f);
                 if (progressFill != null) progressFill.color = new Color(1f, 1f, 1f, alpha);
-                if (glow != null && currentState == State.Displaying)
+                if (glow != null)
                 {
-                    float pulse = 0.3f + Mathf.Sin(Time.time * 3f) * 0.2f;
-                    glow.color = new Color(1f, 1f, 1f, pulse * alpha * 0.3f);
+                    glow.color = new Color(1f, 1f, 1f, alpha);
                 }
             }
 
@@ -678,3 +664,4 @@ namespace Juul
         }
     }
 }
+

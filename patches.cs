@@ -1,4 +1,4 @@
-﻿using GorillaNetworking;
+using GorillaNetworking;
 using HarmonyLib;
 using JetBrains.Annotations;
 using Liv.Lck.Telemetry;
@@ -252,22 +252,22 @@ namespace Juul
                 }
             }
 
-            [HarmonyPatch(typeof(VRRig), "OnDisable")]
-            public class OnDisablePatch
+            [HarmonyPatch(typeof(VRRig), nameof(VRRig.OnDisable))]
+            public class OnDisable
             {
                 public static bool Prefix(VRRig __instance) =>
                     !__instance.isLocal;
             }
 
-            [HarmonyPatch(typeof(VRRig), "Awake")]
-            public class AwakePatch
+            [HarmonyPatch(typeof(VRRig), nameof(VRRig.Awake))]
+            public class Awake
             {
                 public static bool Prefix(VRRig __instance) =>
                     __instance.gameObject.name != "Local Gorilla Player(Clone)";
             }
 
-            [HarmonyPatch(typeof(VRRig), "PostTick")]
-            public class PostTickPatch
+            [HarmonyPatch(typeof(VRRig), nameof(VRRig.PostTick))]
+            public class PostTick
             {
                 public static bool Prefix(VRRig __instance) =>
                     !__instance.isLocal || __instance.enabled;
@@ -431,6 +431,47 @@ namespace Juul
             }
 
             public static bool enabled = true;
+
+            [HarmonyPatch(typeof(VRRig), nameof(VRRig.PostTick))]  // from seralyth, i didnt feel like making my own/finding a way around it
+            public class TorsoPatch
+            {
+                public static event Action VRRigLateUpdate;
+                public static bool enabled;
+                public static int mode = 0;
+
+                public static void Postfix(VRRig __instance)
+                {
+                    if (__instance.isLocal)
+                    {
+                        if (enabled)
+                        {
+                            Quaternion rotation = Quaternion.identity;
+                            switch (mode)
+                            {
+                                case 0:
+                                    rotation = Quaternion.Euler(0f, Time.time * 180f % 360, 0f);
+                                    break;
+                                case 1:
+                                    rotation = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
+                                    break;
+                                case 2:
+                                    rotation = Quaternion.Euler(0f, GorillaTagger.Instance.headCollider.transform.rotation.eulerAngles.y + 180f, 0f);
+                                    break;
+                            }
+
+                            __instance.transform.rotation = rotation;
+                            __instance.head.MapMine(__instance.scaleFactor, __instance.playerOffsetTransform);
+                            __instance.leftHand.MapMine(__instance.scaleFactor, __instance.playerOffsetTransform);
+                            __instance.rightHand.MapMine(__instance.scaleFactor, __instance.playerOffsetTransform);
+                        }
+
+                        VRRigLateUpdate?.Invoke();
+                    }
+                }
+            }
+        
+           
         }
     }
 }
+

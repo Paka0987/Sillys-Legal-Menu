@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using UnityEngine;
 
@@ -24,3 +24,4 @@ namespace Juul
         public static Coroutines instance;
     }
 }
+

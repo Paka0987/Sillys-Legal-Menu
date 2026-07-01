@@ -5,9 +5,12 @@ using GorillaExtensions;
 using GorillaGameModes;
 using GorillaLocomotion;
 using GorillaLocomotion.Gameplay;
+using GorillaLocomotion.Swimming;
 using GorillaNetworking;
 using GorillaTag;
+using GorillaTag.Gravity;
 using GorillaTagScripts;
+using GorillaTagScripts.VirtualStumpCustomMaps;
 using HarmonyLib;
 using JetBrains.Annotations;
 using Photon.Pun;
@@ -165,7 +168,7 @@ namespace Juul
                 {
                     TargetActors = new int[]
                     {
-              Player.OwningNetPlayer.ActorNumber
+                        Player.OwningNetPlayer.ActorNumber
                     },
                 }, false);
             }
@@ -194,7 +197,7 @@ namespace Juul
                 {
                     TargetActors = new int[]
                     {
-              Player.OwningNetPlayer.ActorNumber
+                        Player.OwningNetPlayer.ActorNumber
                     },
                 }, false);
             }
@@ -240,6 +243,212 @@ namespace Juul
                 VibratePlayer(GunLib.LockedPlayer);
             }, true);
         }
+        public static void SendStatusEffectToAll(RoomSystem.StatusEffects effect)
+        {
+            if (PhotonNetwork.IsMasterClient)
+            {
+                RoomSystem.SendStatusEffectAll(effect);
+            }
+        }
+        public static void SendStatusEffectToPlayer(RoomSystem.StatusEffects effect, NetPlayer target)
+        {
+            if (PhotonNetwork.IsMasterClient)
+            {
+                RoomSystem.SendStatusEffectToPlayer(effect, target);
+            }
+        }
+        public static void FreezeAll()
+        {
+            if (PhotonNetwork.IsMasterClient)
+            {
+                SendStatusEffectToAll(RoomSystem.StatusEffects.FrozenTime);
+            }
+        }
+
+        public static void FreezeGun()
+        {
+            GunLib.StartPointerSystem(() =>
+            {
+                if (!PhotonNetwork.IsMasterClient) return;
+                if (GunLib.LockedPlayer == null) return;
+                SendStatusEffectToPlayer(RoomSystem.StatusEffects.FrozenTime, GunLib.LockedPlayer.OwningNetPlayer);
+            }, true);
+        }
+
+        public static void FlingGun()
+        {
+            GunLib.StartPointerSystem(() =>
+            {
+                if (!PhotonNetwork.IsMasterClient) return;
+                if (GunLib.LockedPlayer == null) return;
+                Vector3 launchVelocity = GunLib.spherepointer.transform.forward * 20f;
+                RoomSystem.LaunchPlayer(GunLib.LockedPlayer.OwningNetPlayer, launchVelocity);
+            }, true);
+        }
+
+        public static void FlingAll()
+        {
+            if (!PhotonNetwork.IsMasterClient) return;
+            Vector3 launchVelocity = Vector3.up * 15f;
+            foreach (var player in RoomSystem.PlayersInRoom)
+            {
+                if (player != NetworkSystem.Instance.LocalPlayer)
+                {
+                    RoomSystem.LaunchPlayer(player, launchVelocity);
+                }
+            }
+        }
+
+
+        private static GameObject currentRightBlock = null;
+        private static GameObject currentLeftBlock = null;
+        private static int currentRightBlockId = -1;
+        private static int currentLeftBlockId = -1;
+
+        public static void SSPlatforms()
+        {
+            if (!PhotonNetwork.IsMasterClient) return;
+            if (Inputs.RightGrip)
+            {
+                if (currentRightBlock == null)
+                {
+                    Vector3 spawnPos = GTPlayer.Instance.rightHand.controllerTransform.position;
+                    currentRightBlockId = GetRandomId();
+                    SpawnBlock(currentRightBlockId, spawnPos, Quaternion.identity);
+                    BuilderPiece[] pieces = GameObject.FindObjectsOfType<BuilderPiece>();
+                    foreach (BuilderPiece piece in pieces)
+                    {
+                        if (piece.pieceId == currentRightBlockId)
+                        {
+                            currentRightBlock = piece.gameObject;
+                            Rigidbody rb = piece.GetComponent<Rigidbody>();
+                            if (rb != null)
+                            {
+                                rb.isKinematic = true;
+                                rb.useGravity = false;
+                            }
+                            break;
+                        }
+                    }
+                }
+                if (currentRightBlock != null)
+                {
+                    currentRightBlock.transform.position = GTPlayer.Instance.rightHand.controllerTransform.position;
+                }
+            }
+            else
+            {
+                if (currentRightBlock != null)
+                {
+                    DestroyBlock(currentRightBlockId, currentRightBlock.transform.position, currentRightBlock.transform.rotation, true);
+                    currentRightBlock = null;
+                }
+            }
+            if (Inputs.LeftGrip)
+            {
+                if (currentLeftBlock == null)
+                {
+                    Vector3 spawnPos = GTPlayer.Instance.leftHand.controllerTransform.position;
+                    currentLeftBlockId = GetRandomId();
+                    SpawnBlock(currentLeftBlockId, spawnPos, Quaternion.identity);
+                    BuilderPiece[] pieces = GameObject.FindObjectsOfType<BuilderPiece>();
+                    foreach (BuilderPiece piece in pieces)
+                    {
+                        if (piece.pieceId == currentLeftBlockId)
+                        {
+                            currentLeftBlock = piece.gameObject;
+                            Rigidbody rb = piece.GetComponent<Rigidbody>();
+                            if (rb != null)
+                            {
+                                rb.isKinematic = true;
+                                rb.useGravity = false;
+                            }
+                            break;
+                        }
+                    }
+                }
+                if (currentLeftBlock != null)
+                {
+                    currentLeftBlock.transform.position = GTPlayer.Instance.leftHand.controllerTransform.position;
+                }
+            }
+            else
+            {
+                if (currentLeftBlock != null)
+                {
+                    DestroyBlock(currentLeftBlockId, currentLeftBlock.transform.position, currentLeftBlock.transform.rotation, true);
+                    currentLeftBlock = null;
+                }
+            }
+        }
+
+        public static void BecomeDriver()
+        {
+            if (PhotonNetwork.IsMasterClient)
+                CustomMapsTerminal.instance.mapTerminalNetworkObject.SendRPC("SetTerminalControlStatus_RPC", true, true, PhotonNetwork.LocalPlayer.ActorNumber);
+        }
+        public static void UnlockDriver()
+        {
+            if (PhotonNetwork.IsMasterClient)
+                CustomMapsTerminal.instance.mapTerminalNetworkObject.SendRPC("SetTerminalControlStatus_RPC", true, false, PhotonNetwork.LocalPlayer.ActorNumber);
+        }
+        public static void SpazDriver()
+        {
+            if (!PhotonNetwork.InRoom || !PhotonNetwork.IsMasterClient) return;
+            for (int i = 0; i < 100; i++)
+            {
+                BecomeDriver();
+                UnlockDriver();
+            }
+        }
+
+        public static void GiveDriverGun()
+        {
+            GunLib.StartPointerSystem(() =>
+            {
+                if (!PhotonNetwork.IsMasterClient) return;
+                if (GunLib.LockedPlayer == null) return;
+                CustomMapsTerminal.instance.mapTerminalNetworkObject.SendRPC("SetTerminalControlStatus_RPC", true, true, GunLib.LockedPlayer.OwningNetPlayer.ActorNumber);
+            }, true);
+        }
+        public static void UnlockDriverGun()
+        {
+            GunLib.StartPointerSystem(() =>
+            {
+                if (!PhotonNetwork.IsMasterClient) return;
+                if (GunLib.LockedPlayer == null) return;
+                CustomMapsTerminal.instance.mapTerminalNetworkObject.SendRPC("SetTerminalControlStatus_RPC", true, false, GunLib.LockedPlayer.OwningNetPlayer.ActorNumber);
+            }, true);
+        }
+        public static void SpazDriverGun()
+        {
+            if (!PhotonNetwork.IsMasterClient) return;
+
+            for (int i = 0; i < 50; i++)
+            {
+                GunLib.StartPointerSystem(() =>
+                {
+                    if (GunLib.LockedPlayer == null) return;
+                    CustomMapsTerminal.instance.mapTerminalNetworkObject.SendRPC("SetTerminalControlStatus_RPC", true, true, GunLib.LockedPlayer.OwningNetPlayer.ActorNumber);
+                }, true);
+
+                GunLib.StartPointerSystem(() =>
+                {
+                    if (GunLib.LockedPlayer == null) return;
+                    CustomMapsTerminal.instance.mapTerminalNetworkObject.SendRPC("SetTerminalControlStatus_RPC", true, false, GunLib.LockedPlayer.OwningNetPlayer.ActorNumber);
+                }, true);
+            }
+        }
+        public static void ForceLoadMap(long mapId)
+        {
+            if (!PhotonNetwork.InRoom || !PhotonNetwork.IsMasterClient) return;
+            CustomMapManager.SetRoomMap(mapId);
+            CustomMapManager.ApproveAndLoadRoomMap();
+        }
+
+
+
+
 
         public static void SpawnBlock(int id, Vector3 position, Quaternion rotation)
         {
@@ -382,207 +591,7 @@ namespace Juul
                 }
             }
         }
-        public static void BlockBringGun()
-        {
-            GunLib.StartPointerSystem(() =>
-            {
-                if (GunLib.LockedPlayer != null)
-                {
-                    BringPlayer(GunLib.LockedPlayer);
-                }
-            }, true);
-        }
-
-        public static void BlockBringAll()
-        {
-            foreach (VRRig rig in VRRigCache.ActiveRigs)
-            {
-                if (rig != VRRig.LocalRig)
-                {
-                    BringPlayer(rig);
-                }
-            }
-        }
-
-        private static void BringPlayer(VRRig player)
-        {
-            if (!PhotonNetwork.IsMasterClient) return;
-            Vector3 targetPos = VRRig.LocalRig.transform.position;
-            Vector3 playerPos = player.transform.position;
-            Vector3 direction = (targetPos - playerPos).normalized;
-            float distance = Vector3.Distance(playerPos, targetPos);
-            int steps = Mathf.FloorToInt(distance / 0.5f);
-            for (int i = 0; i <= steps; i++)
-            {
-                float t = (float)i / steps;
-                Vector3 bridgePos = Vector3.Lerp(playerPos, targetPos, t);
-                bridgePos.y = targetPos.y;
-                SpawnBlock(1858470402, bridgePos, Quaternion.identity);
-                if (i % 2 == 0)
-                {
-                    Vector3 offsetPos = bridgePos + Vector3.up * 0.2f;
-                    SpawnBlock(-1447051713, offsetPos, Quaternion.identity);
-                }
-            }
-            for (int i = 0; i < 6; i++)
-            {
-                float angle = i * 60f * Mathf.Deg2Rad;
-                Vector3 surroundPos = playerPos + new Vector3(Mathf.Cos(angle) * 0.5f, 1f, Mathf.Sin(angle) * 0.5f);
-                SpawnBlock(GetRandomId(), surroundPos, Quaternion.identity);
-            }
-            for (int i = 0; i < 3; i++)
-            {
-                Vector3 targetOffset = targetPos + Random.insideUnitSphere * 0.5f;
-                SpawnBlock(GetRandomId(), targetOffset, Quaternion.identity);
-            }
-        }
-        public static void BlockFlingGun()
-        {
-            GunLib.StartPointerSystem(() =>
-            {
-                if (GunLib.LockedPlayer != null)
-                {
-                    FlingPlayer(GunLib.LockedPlayer);
-                }
-            }, true);
-        }
-
-        public static void BlockFlingAll()
-        {
-            foreach (VRRig rig in VRRigCache.ActiveRigs)
-            {
-                if (rig != VRRig.LocalRig)
-                {
-                    FlingPlayer(rig);
-                }
-            }
-        }
-
-        private static void FlingPlayer(VRRig player)
-        {
-            if (!PhotonNetwork.IsMasterClient) return;
-            Vector3 flingDirection = (player.transform.position - GunLib.spherepointer.transform.position).normalized;
-            if (flingDirection == Vector3.zero)
-            {
-                flingDirection = Random.onUnitSphere;
-            }
-            for (int i = 0; i < 12; i++)
-            {
-                float force = i * 0.3f;
-                Vector3 spawnPos = player.transform.position + flingDirection * force;
-                Quaternion spinRot = Quaternion.Euler(Random.Range(0, 360), Random.Range(0, 360), Random.Range(0, 360));
-                SpawnBlock(GetRandomId(), spawnPos, spinRot);
-            }
-            for (int i = 1; i <= 5; i++)
-            {
-                Vector3 linePos = player.transform.position + flingDirection * i;
-                SpawnBlock(-1447051713, linePos, Quaternion.identity);
-            }
-        }
-        public static void BlockFloatGun()
-        {
-            GunLib.StartPointerSystem(() =>
-            {
-                if (GunLib.LockedPlayer != null)
-                {
-                    FloatPlayer(GunLib.LockedPlayer);
-                }
-            }, true);
-        }
-
-        public static void BlockFloatAll()
-        {
-            foreach (VRRig rig in VRRigCache.ActiveRigs)
-            {
-                if (rig != VRRig.LocalRig)
-                {
-                    FloatPlayer(rig);
-                }
-            }
-        }
-
-        private static void FloatPlayer(VRRig player)
-        {
-            if (!PhotonNetwork.IsMasterClient) return;
-            for (int x = -1; x <= 1; x++)
-            {
-                for (int z = -1; z <= 1; z++)
-                {
-                    Vector3 offset = new Vector3(x * 0.3f, -0.5f, z * 0.3f);
-                    Vector3 spawnPos = player.transform.position + offset;
-                    int platformBlockId = 1858470402;
-                    SpawnBlock(platformBlockId, spawnPos, Quaternion.identity);
-                }
-            }
-            Vector3 liftPos = player.transform.position + Vector3.up * 0.2f;
-            SpawnBlock(-1447051713, liftPos, Quaternion.identity);
-            for (int i = 0; i < 4; i++)
-            {
-                float angle = i * 90f * Mathf.Deg2Rad;
-                Vector3 orbitPos = player.transform.position + new Vector3(Mathf.Cos(angle) * 0.8f, 1f, Mathf.Sin(angle) * 0.8f);
-                SpawnBlock(GetRandomId(), orbitPos, Quaternion.identity);
-            }
-        }
-        public static List<GameObject> frozenBlocks = new List<GameObject>();
-        public static List<VRRig> frozenPlayers = new List<VRRig>();
-        public static void BlockFreezeGun()
-        {
-            GunLib.StartPointerSystem(() =>
-            {
-                if (GunLib.LockedPlayer != null)
-                {
-                    FreezePlayer(GunLib.LockedPlayer);
-                }
-            }, true);
-        }
-
-        public static void BlockFreezeAll()
-        {
-            foreach (VRRig rig in VRRigCache.ActiveRigs)
-            {
-                if (rig != VRRig.LocalRig)
-                {
-                    FreezePlayer(rig);
-                }
-            }
-        }
-
-        private static void FreezePlayer(VRRig player)
-        {
-            if (!PhotonNetwork.IsMasterClient) return;
-            float sphereRadius = 1f;
-            float spacing = 0.001f; 
-            int numLayers = Mathf.RoundToInt((sphereRadius * 1.5f) / spacing);
-            for (int layer = 0; layer < numLayers; layer++)
-            {
-                float y = Mathf.Lerp(-sphereRadius, sphereRadius, (float)layer / (numLayers - 1));
-                float layerRadius = Mathf.Sqrt(Mathf.Max(0, sphereRadius * sphereRadius - y * y));
-                if (layerRadius < spacing * 0.5f) continue;
-                float circumference = 1.5f * Mathf.PI * layerRadius;
-                int blocksThisLayer = Mathf.Max(4, Mathf.RoundToInt(circumference / spacing));
-                for (int i = 0; i < blocksThisLayer; i++)
-                {
-                    float angle = (i * 360f / blocksThisLayer) * Mathf.Deg2Rad;
-                    Vector3 offset = new Vector3(
-                        Mathf.Cos(angle) * layerRadius,
-                        y,
-                        Mathf.Sin(angle) * layerRadius
-                    );
-                    Vector3 spawnPos = player.transform.position + offset;
-                    Quaternion rotation = Quaternion.LookRotation(offset.normalized);
-                    SpawnBlock(857098599, spawnPos, rotation);
-                    BuilderPiece[] pieces = GameObject.FindObjectsOfType<BuilderPiece>();
-                    if (pieces.Length > 0)
-                    {
-                        frozenBlocks.Add(pieces[pieces.Length - 1].gameObject);
-                    }
-                }
-            }
-            if (!frozenPlayers.Contains(player))
-            {
-                frozenPlayers.Add(player);
-            }
-        }
+      
         public static void BlockDrawGun()
         {
             GunLib.StartPointerSystem(() =>
@@ -598,7 +607,50 @@ namespace Juul
                 }
             }, true); 
         }
+        public static void BlockSphere()
+        {
+            if (!PhotonNetwork.IsMasterClient) return;
+            Vector3 center = GorillaTagger.Instance.offlineVRRig.transform.position;
+            float radius = 2f;
+            int density = 30;
+            for (int i = 0; i < density * 2; i++)
+            {
+                float theta = 2 * Mathf.PI * i / ((1 + Mathf.Sqrt(5)) / 2);
+                float phi = Mathf.Acos(1 - 2 * (i + 0.5f) / (density * 2));
 
+                Vector3 pos = center + new Vector3(
+                    radius * Mathf.Sin(phi) * Mathf.Cos(theta),
+                    radius * Mathf.Sin(phi) * Mathf.Sin(theta),
+                    radius * Mathf.Cos(phi)
+                );
+                SpawnBlock(GetRandomId(), pos, Quaternion.identity);
+            }
+        }
+        public static void BlockPyramid()
+        {
+            if (!PhotonNetwork.IsMasterClient) return;
+            Vector3 center = GorillaTagger.Instance.offlineVRRig.transform.position;
+            int baseSize = 7;
+            float blockSize = 0.5f;
+            for (int layer = 0; layer < baseSize; layer++)
+            {
+                int currentSize = baseSize - layer;
+                float yOffset = layer * blockSize;
+                int offset = (baseSize - currentSize) / 2;
+                for (int x = 0; x < currentSize; x++)
+                {
+                    for (int z = 0; z < currentSize; z++)
+                    {
+                        Vector3 pos = center + new Vector3(
+                            (x + offset - baseSize / 2) * blockSize,
+                            yOffset,
+                            (z + offset - baseSize / 2) * blockSize
+                        );
+                        SpawnBlock(GetRandomId(), pos, Quaternion.identity);
+                    }
+                }
+            }
+        }
         public static List<T> GetAllType<T>() where T : UnityEngine.Object
         {
             return Resources.FindObjectsOfTypeAll<T>().ToList();
@@ -1864,6 +1916,418 @@ namespace Juul
                 view.RPC("RemotePlayerCaught", RpcTarget.All, new object[0]);
             }, true);
         }
+        public static float lavaSpazInterval = 0.1f;
+        public static void RiseLavaMod()
+        {
+            if (!PhotonNetwork.IsMasterClient) return;
+            InfectionLavaController lava = InfectionLavaController.ActiveControllers.FirstOrDefault();
+            if (lava != null)
+            {
+                lava.reliableState.state = InfectionLavaController.RisingLavaState.Erupting;
+                lava.reliableState.activationProgress = 1f;
+            }
+        }
+        public static void DrainLavaMod()
+        {
+            if (!PhotonNetwork.IsMasterClient) return;
+            InfectionLavaController lava = InfectionLavaController.ActiveControllers.FirstOrDefault();
+            if (lava != null)
+            {
+                lava.reliableState.state = InfectionLavaController.RisingLavaState.Draining;
+                lava.reliableState.activationProgress = 0f;
+            }
+        }
+        public static void SpazLavaMod()
+        {
+            if (!PhotonNetwork.IsMasterClient) return;
+            delay += Time.deltaTime;
+            if (delay >= lavaSpazInterval)
+            {
+                delay = 0f;
+                InfectionLavaController lava = InfectionLavaController.ActiveControllers.FirstOrDefault();
+                if (lava != null)
+                {
+                    bool isActive = lava.reliableState.state != InfectionLavaController.RisingLavaState.Drained &&
+                                   lava.reliableState.state != InfectionLavaController.RisingLavaState.Draining;
+
+                    lava.reliableState.state = isActive ? InfectionLavaController.RisingLavaState.Draining : InfectionLavaController.RisingLavaState.Erupting;
+                    lava.reliableState.activationProgress = isActive ? 0f : 1f;
+                }
+            }
+        }
+        public static void FullLavaMod()
+        {
+            if (!PhotonNetwork.IsMasterClient) return;
+            InfectionLavaController lava = InfectionLavaController.ActiveControllers.FirstOrDefault();
+            if (lava != null)
+            {
+                lava.reliableState.state = InfectionLavaController.RisingLavaState.Full;
+                lava.reliableState.stateStartTime = NetworkSystem.Instance.InRoom ? NetworkSystem.Instance.SimTime : Time.timeAsDouble;
+                lava.reliableState.activationProgress = 1f;
+            }
+        }
+        public static void EmptyLavaMod()
+        {
+            if (!PhotonNetwork.IsMasterClient) return;
+            InfectionLavaController lava = InfectionLavaController.ActiveControllers.FirstOrDefault();
+            if (lava != null)
+            {
+                lava.reliableState.state = InfectionLavaController.RisingLavaState.Drained;
+                lava.reliableState.stateStartTime = NetworkSystem.Instance.InRoom ? NetworkSystem.Instance.SimTime : Time.timeAsDouble;
+                lava.reliableState.activationProgress = 0f;
+            }
+        }
+        public static void LavaSwimGun()
+        {
+            GunLib.StartPointerSystem(() =>
+            {
+                if (!PhotonNetwork.IsMasterClient) return;
+                if (GunLib.LockedPlayer == null) return;
+                InfectionLavaController lava = InfectionLavaController.ActiveControllers.FirstOrDefault();
+                if (lava == null) return;
+                GunLib.LockedPlayer.transform.position = lava.SurfaceCenter;
+                lava.reliableState.state = InfectionLavaController.RisingLavaState.Full;
+                lava.reliableState.activationProgress = 1f;
+            }, true);
+        }
+
+      
+        public static void WaterSwimGun()
+        {
+            GunLib.StartPointerSystem(() =>
+            {
+                if (!PhotonNetwork.IsMasterClient) return;
+                if (GunLib.LockedPlayer == null) return;
+
+                WaterVolume[] waterVolumes = UnityEngine.Object.FindObjectsOfType<WaterVolume>();
+                if (waterVolumes == null || waterVolumes.Length == 0) return;
+
+                WaterVolume closestWater = null;
+                float closestDistance = float.MaxValue;
+                Vector3 bestSurfacePoint = Vector3.zero;
+
+                foreach (WaterVolume volume in waterVolumes)
+                {
+                    if (volume.GetSurfaceQueryForPoint(GunLib.LockedPlayer.transform.position, out var result))
+                    {
+                        float distance = Vector3.Distance(GunLib.LockedPlayer.transform.position, result.surfacePoint);
+                        if (distance < closestDistance)
+                        {
+                            closestDistance = distance;
+                            closestWater = volume;
+                            bestSurfacePoint = result.surfacePoint;
+                        }
+                    }
+                }
+
+                if (closestWater != null)
+                {
+                    GunLib.LockedPlayer.transform.position = bestSurfacePoint;
+                }
+            }, true);
+        }
+        public static void PaintbrawlLagGunTest()
+        {
+            GunLib.StartPointerSystem(() =>
+            {
+                if (!PhotonNetwork.IsMasterClient) return;
+                if (GunLib.LockedPlayer == null) return;
+                var pb = GetPaintbrawl();
+                if (pb == null) return;
+                int targetActor = GunLib.LockedPlayer.OwningNetPlayer.ActorNumber;
+                pb.playerLives[targetActor] = -10;
+                pb.playerStunTimes[targetActor] = float.PositiveInfinity;
+                for (int i = 0; i < 10; i++)
+                {
+                    if (i % 2 == 0)
+                        pb.playerStatusDict[targetActor] = GorillaPaintbrawlManager.PaintbrawlStatus.RedTeam;
+                    else
+                        pb.playerStatusDict[targetActor] = GorillaPaintbrawlManager.PaintbrawlStatus.BlueTeam;
+                }
+            }, true);
+        }
+        private static RacingManager racingManager;
+
+        private static RacingManager GetRacingManager()
+        {
+            if (racingManager == null)
+            {
+                racingManager = RacingManager.instance;
+            }
+            return racingManager;
+        }
+
+        public static void ForceStartRace(int raceId = 0, int laps = 1)
+        {
+            var manager = GetRacingManager();
+            if (manager == null) return;
+
+            manager.Button_StartRace(raceId, laps);
+        }
+        public static void Start3LapRace()
+        {
+            var manager = GetRacingManager();
+            if (manager == null) return;
+
+            manager.Button_StartRace(0, 3);
+        }
+
+        public static void Start5LapRace()
+        {
+            var manager = GetRacingManager();
+            if (manager == null) return;
+
+            manager.Button_StartRace(0, 5);
+        }
+
+        public static void SpamRaceStart()
+        {
+            if (Time.time > delay)
+            {
+                delay = Time.time + 0.5f;
+
+                var manager = GetRacingManager();
+                if (manager == null) return;
+
+                manager.Button_StartRace(0, 1);
+            }
+        }
+
+        public static void ForceEndCurrentRace()
+        {
+            var manager = GetRacingManager();
+            if (manager == null) return;
+
+            var racesField = typeof(RacingManager).GetField("races", BindingFlags.NonPublic | BindingFlags.Instance);
+            if (racesField != null)
+            {
+                var races = racesField.GetValue(manager) as Array;
+                if (races != null && races.Length > 0)
+                {
+                    var race = races.GetValue(0);
+                    var raceEndedMethod = race.GetType().GetMethod("RaceEnded", BindingFlags.NonPublic | BindingFlags.Instance);
+                    raceEndedMethod?.Invoke(race, null);
+                }
+            }
+        }
+        public static void CompleteRaceInstantly()
+        {
+            var manager = GetRacingManager();
+            if (manager == null) return;
+
+            var racesField = typeof(RacingManager).GetField("races", BindingFlags.NonPublic | BindingFlags.Instance);
+            if (racesField != null)
+            {
+                var races = racesField.GetValue(manager) as Array;
+                if (races != null && races.Length > 0)
+                {
+                    var race = races.GetValue(0);
+
+                    var numCheckpointsToWinField = race.GetType().GetField("numCheckpointsToWin", BindingFlags.NonPublic | BindingFlags.Instance);
+                    var racersField = race.GetType().GetField("racers", BindingFlags.NonPublic | BindingFlags.Instance);
+
+                    if (numCheckpointsToWinField != null && racersField != null)
+                    {
+                        int target = (int)numCheckpointsToWinField.GetValue(race);
+                        var racers = racersField.GetValue(race) as System.Collections.IList;
+
+                        if (racers != null)
+                        {
+                            for (int i = 0; i < racers.Count; i++)
+                            {
+                                var racer = racers[i];
+                                var numCheckpointsPassedField = racer.GetType().GetField("numCheckpointsPassed");
+                                if (numCheckpointsPassedField != null)
+                                {
+                                    numCheckpointsPassedField.SetValue(racer, target);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        public static void DisqualifyAllRacers()
+        {
+            if (!PhotonNetwork.IsMasterClient) return;
+
+            var manager = GetRacingManager();
+            if (manager == null) return;
+
+            var racesField = typeof(RacingManager).GetField("races", BindingFlags.NonPublic | BindingFlags.Instance);
+            if (racesField != null)
+            {
+                var races = racesField.GetValue(manager) as Array;
+                if (races != null && races.Length > 0)
+                {
+                    var race = races.GetValue(0);
+                    var racersField = race.GetType().GetField("racers", BindingFlags.NonPublic | BindingFlags.Instance);
+
+                    if (racersField != null)
+                    {
+                        var racers = racersField.GetValue(race) as System.Collections.IList;
+                        if (racers != null)
+                        {
+                            for (int i = 0; i < racers.Count; i++)
+                            {
+                                var racer = racers[i];
+                                var isDisqualifiedField = racer.GetType().GetField("isDisqualified");
+                                if (isDisqualifiedField != null)
+                                {
+                                    isDisqualifiedField.SetValue(racer, true);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        public static void ResetRace()
+        {
+            if (!PhotonNetwork.IsMasterClient) return;
+
+            var manager = GetRacingManager();
+            if (manager == null) return;
+
+            var racesField = typeof(RacingManager).GetField("races", BindingFlags.NonPublic | BindingFlags.Instance);
+            if (racesField != null)
+            {
+                var races = racesField.GetValue(manager) as Array;
+                if (races != null && races.Length > 0)
+                {
+                    var race = races.GetValue(0);
+                    var clearMethod = race.GetType().GetMethod("Clear", BindingFlags.NonPublic | BindingFlags.Instance);
+                    clearMethod?.Invoke(race, null);
+                }
+            }
+        }
+        private static List<HitTargetNetworkState> hitTargets = new List<HitTargetNetworkState>();
+        private static float lastHitSpamTime = 0f;
+        private static float hitSpamCooldown = 0.5f; 
+
+        private static List<HitTargetNetworkState> GetAllHitTargets()
+        {
+            hitTargets.Clear();
+            hitTargets.AddRange(Resources.FindObjectsOfTypeAll<HitTargetNetworkState>());
+            return hitTargets;
+        }
+
+        public static void ForceHitAllTargets()
+        {
+            if (!PhotonNetwork.IsMasterClient) return;
+            var targets = GetAllHitTargets();
+            if (targets.Count == 0) return;
+
+            foreach (var target in targets)
+            {
+                if (target != null && target.gameObject.activeInHierarchy)
+                {
+                    target.TargetHit(Vector3.zero, Vector3.zero);
+                }
+            }
+        }
+
+        public static void ForceHitTargetGun()
+        {
+            GunLib.StartPointerSystem(() =>
+            {
+                if (!PhotonNetwork.IsMasterClient) return;
+                var targets = GetAllHitTargets();
+                if (targets.Count == 0) return;
+                Vector3 hitPoint = GunLib.spherepointer.transform.position;
+                float closestDist = 5f;
+                HitTargetNetworkState closestTarget = null;
+                foreach (var target in targets)
+                {
+                    if (target != null && target.gameObject.activeInHierarchy)
+                    {
+                        float dist = Vector3.Distance(target.transform.position, hitPoint);
+                        if (dist < closestDist)
+                        {
+                            closestDist = dist;
+                            closestTarget = target;
+                        }
+                    }
+                }
+
+                if (closestTarget != null)
+                {
+                    closestTarget.TargetHit(Vector3.zero, hitPoint);
+                }
+            }, true);
+        }
+
+        public static void MaxScoreAllTargets()
+        {
+            if (!PhotonNetwork.IsMasterClient) return;
+            var targets = GetAllHitTargets();
+            if (targets.Count == 0) return;
+            foreach (var target in targets)
+            {
+                if (target != null)
+                {
+                    var networkedScoreField = typeof(HitTargetNetworkState).GetField("networkedScore", BindingFlags.NonPublic | BindingFlags.Instance);
+                    if (networkedScoreField != null)
+                    {
+                        var scoreSO = networkedScoreField.GetValue(target) as WatchableIntSO;
+                        if (scoreSO != null)
+                        {
+                            scoreSO.Value = int.MaxValue;
+                        }
+                    }
+                    target.TargetHit(Vector3.zero, Vector3.zero);
+                }
+            }
+        }
+
+        public static void ResetAllTargetScores()
+        {
+            if (!PhotonNetwork.IsMasterClient) return;
+            var targets = GetAllHitTargets();
+            if (targets.Count == 0) return;
+
+            foreach (var target in targets)
+            {
+                if (target != null)
+                {
+                    var networkedScoreField = typeof(HitTargetNetworkState).GetField("networkedScore", BindingFlags.NonPublic | BindingFlags.Instance);
+                    if (networkedScoreField != null)
+                    {
+                        var scoreSO = networkedScoreField.GetValue(target) as WatchableIntSO;
+                        if (scoreSO != null)
+                        {
+                            scoreSO.Value = 0;
+                        }
+                    }
+                }
+            }
+        }
+
+        public static void SpamHitTargets()
+        {
+            if (Time.time > lastHitSpamTime + hitSpamCooldown)
+            {
+                lastHitSpamTime = Time.time;
+                if (PhotonNetwork.IsMasterClient)
+                {
+                    ForceHitAllTargets();
+                }
+            }
+        }
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     }
 }
+

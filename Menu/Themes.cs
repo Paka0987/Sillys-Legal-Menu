@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Runtime.CompilerServices;
 using System.Linq;
 using UnityEngine;
@@ -620,6 +620,127 @@ namespace Juul
                     Colors.Blend(Color.yellow, Color.green, Color.white)
                 }
             },
+            new Theme()
+            {
+                Name = "Summer",
+                Speed = 0.6f,
+                Colors = new Color[]
+                {
+                    Colors.Blend(Color.yellow, Color.red, Color.white),
+                    Colors.Blend(Color.orange, Color.yellow),
+                    Colors.Blend(Color.red, Color.orange, Color.white),
+                    Colors.Blend(Color.yellow, Color.white)
+                }
+            },
+            new Theme()
+            {
+                Name = "Autumn",
+                Speed = 0.55f,
+                Colors = new Color[]
+                {
+                    Colors.Blend(Color.red, Color.yellow, Color.brown),
+                    Colors.Blend(Color.orange, Color.brown),
+                    Colors.Blend(Color.brown, Color.red),
+                    Colors.Blend(Color.yellow, Color.orange)
+                }
+            },
+            new Theme()
+            {
+                Name = "Winter",
+                Speed = 0.4f,
+                Colors = new Color[]
+                {
+                    Colors.Blend(Color.white, Color.blue, Color.white),
+                    Colors.Blend(Color.cyan, Color.white),
+                    Colors.Blend(Color.blue, Color.white, Color.white),
+                    Colors.Blend(Color.gray, Color.white)
+                }
+            },
+            new Theme()
+            {
+                Name = "Candy Cane",
+                Speed = 0.8f,
+                Colors = new Color[]
+                {
+                    Color.red,
+                    Colors.Blend(Color.red, Color.white),
+                    Color.white,
+                    Colors.Blend(Color.white, Color.red)
+                }
+            },
+            new Theme()
+            {
+                Name = "Frozen",
+                Speed = 0.4f,
+                Colors = new Color[]
+                {
+                    Colors.Blend(Color.cyan, Color.white, Color.white),
+                    Color.white,
+                    Colors.Blend(Color.blue, Color.white),
+                    Colors.Blend(Color.cyan, Color.blue)
+                }
+            },
+            new Theme()
+            {
+                Name = "Lavender",
+                Speed = 0.6f,
+                Colors = new Color[]
+                {
+                    Colors.Blend(Color.magenta, Color.white),
+                    Colors.Blend(Color.blue, Color.magenta),
+                    Colors.Blend(Color.white, Color.magenta),
+                    Colors.Blend(Color.purple, Color.white)
+                }
+            },
+            new Theme()
+            {
+                Name = "Cyberpunk",
+                Speed = 1.2f,
+                Colors = new Color[]
+                {
+                    Color.yellow,
+                    Colors.Blend(Color.cyan, Color.magenta),
+                    Color.magenta,
+                    Colors.Blend(Color.blue, Color.black)
+                }
+            },
+            new Theme()
+            {
+                Name = "Abyss",
+                Speed = 0.3f,
+                Colors = new Color[]
+                {
+                    Colors.Blend(Color.blue, Color.black),
+                    Color.black,
+                    Colors.Blend(Color.magenta, Color.black),
+                    Colors.Blend(Color.purple, Color.black)
+                }
+            },
+            new Theme()
+            {
+                Name = "Violet",
+                Speed = 0.5f,
+                Colors = new Color[]
+                {
+                    Colors.Blend(Color.magenta, Color.blue),
+                    Color.purple,
+                    Colors.Blend(Color.blue, Color.purple),
+                    Colors.Blend(Color.magenta, Color.white)
+                }
+            },
+            new Theme()
+            {
+                Name = "Stone",
+                Speed = 0.35f,
+                Colors = new Color[]
+                {
+                    Color.gray,
+                    Colors.Blend(Color.gray, Color.black),
+                    Colors.Blend(Color.black, Color.brown),
+                    Colors.Blend(Color.brown, Color.gray)
+                }
+            },
         };
     }
 }
+

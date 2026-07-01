@@ -1,4 +1,4 @@
-﻿using Photon.Pun;
+using Photon.Pun;
 using BepInEx;
 using HarmonyLib;
 using UnityEngine;
@@ -160,3 +160,4 @@ namespace Juul
         }
     }
 }
+

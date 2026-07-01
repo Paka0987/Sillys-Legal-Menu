@@ -1,6 +1,7 @@
 using ExitGames.Client.Photon;
 using GorillaLocomotion;
 using GorillaNetworking;
+using GorillaTagScripts.Builder;
 using HarmonyLib;
 using Photon.Pun;
 using Photon.Realtime;
@@ -23,6 +24,7 @@ using UnityEngine.UIElements;
 using UnityEngine.XR;
 using static Mono.Security.X509.X520;
 using static Unity.Burst.Intrinsics.X86.Avx;
+using static UnityEngine.XR.OpenXR.Features.Interactions.HTCViveControllerProfile;
 using Application = UnityEngine.Application;
 using Image = UnityEngine.UI.Image;
 using Object = UnityEngine.Object;
@@ -60,6 +62,8 @@ namespace Juul
         private const float boxWidth = 0.018f;
         private static GameObject hudInstance;
         private static TextMesh textMesh;
+        private static GameObject pingHudInstance;
+        private static TextMesh pingTextMesh;
         private static float hudTimer = 0f;
         private static int currentFPS = 0;
         public static void VisualPlayer(VRRig rig, Color color)
@@ -78,6 +82,9 @@ namespace Juul
                 player.mainSkin.material.color = player.playerColor;
             }
         }
+
+        
+        
         public static void BoneESP()
         {
             if (GorillaParent.instance == null || Core.CachedActiveRigs == null || Core.CachedActiveRigs.Length == 0)
@@ -125,7 +132,7 @@ namespace Juul
                 try
                 {
                     int boneIndexA = bones[i];
-                    int boneIndexB = bones[i + 1];
+                    int boneIndexB = bones[i];
 
                     if (boneIndexA >= rig.mainSkin.bones.Length || boneIndexB >= rig.mainSkin.bones.Length)
                         continue;
@@ -143,7 +150,7 @@ namespace Juul
                 }
                 catch (System.Exception e)
                 {
-                    Debug.LogError($"Failed to create bone line at index {i}: {e.Message}");
+                    
                 }
             }
 
@@ -817,7 +824,7 @@ namespace Juul
             text.fontSize = 24;
             text.color = Core.BaseColor;
             text.alignment = TextAnchor.MiddleCenter;
-            text.text = rig.Creator.NickName;
+            text.text = rig.Creator != null ? rig.Creator.NickName : "Unknown";
             text.resizeTextForBestFit = false;
             text.fontStyle = FontStyle.Bold;
             text.horizontalOverflow = HorizontalWrapMode.Overflow;
@@ -838,6 +845,7 @@ namespace Juul
         static Dictionary<string, string> AndriodPool = new Dictionary<string, string> { };
         private static string CreationDate(VRRig rig)
         {
+            if (rig.Creator == null || string.IsNullOrEmpty(rig.Creator.UserId)) return "Unknown";
             string UserId = rig.Creator.UserId;
 
             if (datePool.ContainsKey(UserId))
@@ -884,6 +892,7 @@ namespace Juul
                 var fps = rig.fps;
                 var fpsstring = fps.ToString();
                 var creationDate = CreationDate(rig);
+
                 if (fps < 30)
                 {
                     fpsstring = $"<color=red>{fps.ToString()}</color>";
@@ -900,11 +909,31 @@ namespace Juul
                 {
                     fpsstring = $"<color=cyan>{fps.ToString()}</color>";
                 }
-                text.text = $"USERNAME : {rig.Creator.NickName}\nID : {rig.Creator.UserId}\nPLATFORM : unkown\nFPS : {fpsstring}\nCREATION : {creationDate}";
-            }
+
+                string nickName = rig.Creator != null ? rig.Creator.NickName : "Unknown";
+                string userId = rig.Creator != null ? rig.Creator.UserId : "Unknown";
+
+               /* string platformName = "UNKNOWN";
+                if (rig.Creator != null)
+                {
+                    try
+                    {
+                        var fieldInfo = rig.Creator.GetType().GetField("cosmetics");
+                        if (fieldInfo != null)
+                        {
+                            string cosmetics = fieldInfo.GetValue(rig.Creator) as string ?? "";
+                            bool isSteam = cosmetics.Contains("FIRST LOGIN");
+                            platformName = isSteam ? "STEAM" : "OCULUS";
+                        }
+                    }
+                    catch { }
+                }*/
+
+                text.text = $"USERNAME : {nickName}\nID : {userId}\nFPS : {fpsstring}\nCREATION : {creationDate}";
+            }                                                     //PLATFORM : {platformName}\n
             else
             {
-                text.text = rig.Creator.NickName;
+                text.text = rig.Creator != null ? rig.Creator.NickName : "Unknown";
             }
 
             text.color = Core.BaseColor;
@@ -1001,6 +1030,7 @@ namespace Juul
             private int fps;
             private float timer;
             private string infoText = "";
+            private string plainInfoText = "";
 
             private void Start()
             {
@@ -1009,25 +1039,26 @@ namespace Juul
                 textMesh.GetComponent<MeshRenderer>().material = textMesh.font.material;
                 textMesh.fontSize = 500;
                 textMesh.characterSize = 0.5f;
+                textMesh.richText = true;
                 textMesh.anchor = TextAnchor.UpperLeft;
 
                 if (Camera.main != null)
                 {
                     transform.SetParent(Camera.main.transform, false);
                 }
-                transform.localPosition = new Vector3(0.15f, 0.25f, 1.0f);
-                transform.localRotation = Quaternion.identity;
-                transform.localScale = new Vector3(0.002f, 0.002f, 0.002f);
+                transform.localPosition = new Vector3(-0.75f, 0.25f, 1.0f);
+                transform.localRotation = Quaternion.Euler(0f, -15f, 0f);
+                transform.localScale = new Vector3(0.0015f, 0.0015f, 0.0015f);
             }
 
             private void Update()
             {
+                transform.localPosition = new Vector3(-0.75f, 0.25f, 1.0f);
+                transform.localRotation = Quaternion.Euler(0f, -15f, 0f);
                 bool isVR = UnityEngine.XR.XRSettings.isDeviceActive;
                 textMesh.GetComponent<MeshRenderer>().enabled = isVR;
-
                 float frameFPS = 1.0f / Time.unscaledDeltaTime;
                 fps = (int)Mathf.Lerp(fps, frameFPS, Time.unscaledDeltaTime * 10f);
-
                 timer += Time.deltaTime;
                 if (timer > 0.1f)
                 {
@@ -1039,18 +1070,91 @@ namespace Juul
                     bool isMaster = PhotonNetwork.IsMasterClient;
                     VRRig localRig = GorillaTagger.Instance.offlineVRRig;
                     bool isInfected = localRig != null && Infected(localRig);
+                    string mapName = GetCurrentMapName();
 
-                    infoText = 
-                        $"Name: {name}\n" +
-                        $"FPS: {fps}\n" +
-                        $"In Lobby: {inRoom}\n" +
-                        $"Room Players: {roomPlayers}\n" +
-                        $"Is Master Client: {isMaster}\n" +
-                        $"Is Tagged: {isInfected}";
+                    Vector3 playerPos = transform.position;
+                    string position = $"({playerPos.x:F2}, {playerPos.y:F2}, {playerPos.z:F2})";
 
+                    string velocity = "N/A";
+                    Rigidbody rb = GetComponent<Rigidbody>();
+                    if (rb != null)
+                    {
+                        Vector3 vel = rb.velocity;
+                        velocity = $"({vel.x:F2}, {vel.y:F2}, {vel.z:F2}) | Speed: {vel.magnitude:F2}";
+                    }
+                    else
+                    {
+                        Vector3 currentPos = transform.position;
+                        if (lastPosition != Vector3.zero)
+                        {
+                            Vector3 vel = (currentPos - lastPosition) / Time.deltaTime;
+                            velocity = $"({vel.x:F2}, {vel.y:F2}, {vel.z:F2}) | Speed: {vel.magnitude:F2}";
+                        }
+                        lastPosition = currentPos;
+                    }
+
+                    string[] lines = new string[]
+                    {
+                        $"Name: {name}",
+                        $"FPS: {fps}",
+                        $"Ping: {PhotonNetwork.GetPing()} ms",
+                        $"In Lobby: {inRoom}",
+                        $"Room Players: {roomPlayers}",
+                        $"Is Master Client: {isMaster}",
+                        $"Is Tagged: {isInfected}",
+                        $"Map: {mapName}",
+                        $"Position: {position}",
+                        $"Velocity: {velocity}"
+                    };
+                    infoText = "";
+                    plainInfoText = "";
+                    for (int i = 0; i < lines.Length; i++)
+                    {
+                        float normalizedPos = lines.Length > 1 ? (float)i / (lines.Length - 1) : 0f;
+                        Color c = GetSyncedGradientColor(normalizedPos);
+                        infoText += $"<color=#{ColorUtility.ToHtmlStringRGB(c)}>{lines[i]}</color>\n";
+                        plainInfoText += lines[i] + "\n";
+                    }
                     textMesh.text = infoText;
-                    textMesh.color = Core.BaseColor;
+                    textMesh.color = Color.white;
                 }
+            }
+
+            private Vector3 lastPosition = Vector3.zero;
+            private string GetCurrentMapName()
+            {
+                var mapChecks = new (GameObject obj, string name, string path)[]
+                {
+                    (null, "Monke Blocks", "MonkeBlocksRoomScene"),
+                    (null, "Shared Block", "MonkeBlocksSharedRoom"),
+                    (null, "Ghost Reactor", "GhostReactorRoot"),
+                    (null, "Metropolis", "MetroMain"),
+                    (null, "Ranked", "RankedMain"),
+                    (null, "Hover Park", "HoverboardLevel"),
+                    (null, "Forest", "Environment Objects/LocalObjects_Prefab/Forest"),
+                    (null, "City", "City_Pretty"),
+                    (null, "Mountain", "Mountain"),
+                    (null, "Canyon", "Canyon"),
+                    (null, "Beach", "Beach"),
+                    (null, "Critters", "Critters"),
+                    (null, "Basement", "Basement"),
+                    (null, "Bayou", "BayouMain"),
+                    (null, "Cave", "Cave_Main_Prefab"),
+                    (null, "Clouds", "skyjungle")
+                };
+
+                for (int i = 0; i < mapChecks.Length; i++)
+                {
+                    var mapCheck = mapChecks[i];
+                    GameObject foundObj = GameObject.Find(mapCheck.path);
+
+                    if (foundObj != null && foundObj.activeInHierarchy)
+                    {
+                        return mapCheck.name;
+                    }
+                }
+
+                return "unknown";
             }
 
             private void OnGUI()
@@ -1069,10 +1173,18 @@ namespace Juul
                 float yOffset = 8f;
                 float xOffset = 8f;
 
+                int lineCount = 10; 
+                float lineHeight = pcStyle.fontSize * 1.2f; 
+                float labelHeight = lineCount * lineHeight + 16f; 
+
+                float labelWidth = 500f; 
+
+                pcStyle.richText = false;
                 pcStyle.normal.textColor = Color.black;
-                GUI.Label(new Rect(xOffset + 1f, yOffset + 1f, 400f, 200f), infoText, pcStyle);
-                pcStyle.normal.textColor = Core.BaseColor;
-                GUI.Label(new Rect(xOffset, yOffset, 400f, 200f), infoText, pcStyle);
+                GUI.Label(new Rect(xOffset + 1f, yOffset + 1f, labelWidth, labelHeight), plainInfoText, pcStyle);
+
+                pcStyle.richText = true;
+                GUI.Label(new Rect(xOffset, yOffset, labelWidth, labelHeight), infoText, pcStyle);
             }
         }
 
@@ -1096,6 +1208,26 @@ namespace Juul
             }
         }
 
+        public static Color GetSyncedGradientColor(float normalizedPosition)
+        {
+            if (Themes.List == null || Core.ThemeValue < 0 || Core.ThemeValue >= Themes.List.Length)
+                return Core.BaseColor;
+            Theme currentTheme = Themes.List[Core.ThemeValue];
+            if (currentTheme.Colors == null || currentTheme.Colors.Length == 0) return Core.BaseColor;
+            if (currentTheme.Colors.Length == 1) return currentTheme.Colors[0];
+            
+            float colorCount = currentTheme.Colors.Length;
+            float baseT = Time.time * currentTheme.Speed;
+            float t = Mathf.Repeat(baseT + (normalizedPosition * colorCount * 0.15f), colorCount);
+            
+            int indexA = Mathf.FloorToInt(t) % currentTheme.Colors.Length;
+            int indexB = (indexA + 1) % currentTheme.Colors.Length;
+            
+            float localT = t - Mathf.Floor(t);
+            float easedT = localT < 0.5f ? 2f * localT * localT : 1f - Mathf.Pow(-2f * localT + 2f, 2f) / 2f;
+            
+            return Color.Lerp(currentTheme.Colors[indexA], currentTheme.Colors[indexB], easedT);
+        }
 
         public class ArrayListBehavior : MonoBehaviour
         {
@@ -1115,6 +1247,7 @@ namespace Juul
                     textStyle.fontSize = 20;
                     textStyle.fontStyle = FontStyle.Normal;
                     textStyle.alignment = TextAnchor.MiddleRight;
+                    textStyle.richText = true;
                 }
                 if (bgTexture == null)
                 {
@@ -1132,7 +1265,7 @@ namespace Juul
                 enabledMods.Clear();
                 foreach (var category in Buttons.Modules)
                 {
-                    if (category == Buttons.EnabledCategory) continue;
+                    if (category == ExtraButtons.EnabledCategory) continue;
                     if (category == PlayerMenu.GetPlayersCategory()) continue;
                     foreach (var btn in category.Buttons)
                     {
@@ -1167,24 +1300,6 @@ namespace Juul
                     yOffset += rectHeight + gap;
                 }
             }
-
-
-            private Color GetSyncedGradientColor(float normalizedPosition)
-            {
-                if (Themes.List == null || Core.ThemeValue < 0 || Core.ThemeValue >= Themes.List.Length)
-                    return Core.BaseColor;
-                Theme currentTheme = Themes.List[Core.ThemeValue];
-                if (currentTheme.Colors == null || currentTheme.Colors.Length == 0) return Core.BaseColor;
-                if (currentTheme.Colors.Length == 1) return currentTheme.Colors[0];
-                float totalRange = currentTheme.Colors.Length - 1;
-                float baseT = Mathf.PingPong(Time.time * currentTheme.Speed, totalRange);
-                float t = Mathf.PingPong(baseT + normalizedPosition * totalRange * 0.15f, totalRange);
-                int indexA = Mathf.FloorToInt(t);
-                int indexB = Mathf.Clamp(indexA + 1, 0, currentTheme.Colors.Length - 1);
-                float localT = t - indexA;
-                float easedT = localT < 0.5f ? 2f * localT * localT : 1f - Mathf.Pow(-2f * localT + 2f, 2f) / 2f;
-                return Color.Lerp(currentTheme.Colors[indexA], currentTheme.Colors[indexB], easedT);
-            }
         }
         public static void OutcastAll()
         {
@@ -1202,9 +1317,9 @@ namespace Juul
                     hudInstance.transform.SetParent(Camera.main.transform, false);
                 }
 
-                hudInstance.transform.localPosition = new Vector3(0.15f, 0.25f, 1.0f);
-                hudInstance.transform.localRotation = Quaternion.identity;
-                hudInstance.transform.localScale = new Vector3(0.002f, 0.002f, 0.002f);
+                hudInstance.transform.localPosition = new Vector3(-0.75f, 0.25f, 1.0f);
+                hudInstance.transform.localRotation = Quaternion.Euler(0f, -15f, 0f);
+                hudInstance.transform.localScale = new Vector3(0.0015f, 0.0015f, 0.0015f);
 
                 textMesh = hudInstance.AddComponent<TextMesh>();
                 textMesh.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
@@ -1237,6 +1352,7 @@ namespace Juul
                 line.startWidth = line.endWidth = 0.02f;
                 line.positionCount = 2;
                 line.SetPositions(new Vector3[] { hand.position, hand.position });
+                GameObject.Destroy(line.material, 0.5f);
                 GameObject.Destroy(line.gameObject, 0.5f);
             }
         }
@@ -1268,7 +1384,7 @@ namespace Juul
                 activeRigs.Add(rig);
                 Vector3 headPosition = rig.head.rigTarget.position;
 
-                Color tracerColor = Infected(rig) ? Color.red : Core.BaseColor;
+                Color tracerColor = Infected(rig) ? Color.red : Color.green;
 
                 if (!tracerLineCache.ContainsKey(rig))
                 {
@@ -1366,7 +1482,7 @@ namespace Juul
                 if (chamShader != null)
                 {
                     rig.mainSkin.material.shader = chamShader;
-                    rig.mainSkin.material.color = Infected(rig) ? Color.red : Core.BaseColor;
+                    rig.mainSkin.material.color = Infected(rig) ? Color.red : Color.green;
                 }
             }
         }
@@ -1386,6 +1502,290 @@ namespace Juul
             originalMaterials.Clear();
             originalColors.Clear();
         }
+        private static Dictionary<VRRig, Material> toonChamMaterialCache = new Dictionary<VRRig, Material>();
+        private static Dictionary<VRRig, Material> outlineChamMaterialCache = new Dictionary<VRRig, Material>();
+        private static Dictionary<VRRig, Material> wireframeChamMaterialCache = new Dictionary<VRRig, Material>();
+        private static Dictionary<VRRig, Material> hologramChamMaterialCache = new Dictionary<VRRig, Material>();
+        private static Dictionary<VRRig, Material> metallicChamMaterialCache = new Dictionary<VRRig, Material>();
+        public static void ToonChams()
+        {
+            if (GorillaParent.instance == null || Core.CachedActiveRigs == null || Core.CachedActiveRigs.Length == 0)
+                return;
+
+            if (GorillaTagger.Instance == null)
+                return;
+
+            VRRig[] currentRigs = Core.CachedActiveRigs;
+
+            foreach (VRRig rig in currentRigs)
+            {
+                if (rig == null || rig == GorillaTagger.Instance.offlineVRRig)
+                    continue;
+
+                if (rig.mainSkin == null)
+                    continue;
+
+                if (!toonChamMaterialCache.ContainsKey(rig))
+                {
+                    Shader toonShader = Shader.Find("Toon/Lit");
+                    if (toonShader == null) toonShader = Core.GuiTextShader;
+
+                    Material toonMaterial = new Material(toonShader);
+                    toonMaterial.SetFloat("_Glossiness", 0f);
+                    toonMaterial.SetFloat("_Metallic", 0f);
+                    toonMaterial.SetColor("_Color", Core.BaseColor);
+                    toonMaterial.SetFloat("_OutlineWidth", 0.02f);
+                    toonMaterial.SetColor("_OutlineColor", Color.black);
+
+                    toonChamMaterialCache[rig] = toonMaterial;
+                    originalMaterials[rig] = rig.mainSkin.material;
+                }
+
+                rig.mainSkin.material = toonChamMaterialCache[rig];
+                rig.mainSkin.material.color = Core.BaseColor;
+            }
+        }
+
+        public static void CleanupToonChams()
+        {
+            foreach (var kvp in toonChamMaterialCache)
+            {
+                if (kvp.Key != null && kvp.Key.mainSkin != null)
+                {
+                    if (originalMaterials.ContainsKey(kvp.Key))
+                        kvp.Key.mainSkin.material = originalMaterials[kvp.Key];
+                }
+                if (kvp.Value != null)
+                    GameObject.Destroy(kvp.Value);
+            }
+            toonChamMaterialCache.Clear();
+        }
+
+        public static void OutlineChams()
+        {
+            if (GorillaParent.instance == null || Core.CachedActiveRigs == null || Core.CachedActiveRigs.Length == 0)
+                return;
+
+            if (GorillaTagger.Instance == null)
+                return;
+
+            VRRig[] currentRigs = Core.CachedActiveRigs;
+
+            foreach (VRRig rig in currentRigs)
+            {
+                if (rig == null || rig == GorillaTagger.Instance.offlineVRRig)
+                    continue;
+
+                if (rig.mainSkin == null)
+                    continue;
+
+                if (!outlineChamMaterialCache.ContainsKey(rig))
+                {
+                    Shader outlineShader = Shader.Find("Outlined/SilhouetteOnly");
+                    if (outlineShader == null) outlineShader = Core.GuiTextShader;
+
+                    Material outlineMaterial = new Material(outlineShader);
+                    outlineMaterial.SetColor("_OutlineColor", Core.BaseColor);
+                    outlineMaterial.SetFloat("_OutlineWidth", 0.03f);
+                    outlineMaterial.SetColor("_Color", new Color(0, 0, 0, 0));
+
+                    outlineChamMaterialCache[rig] = outlineMaterial;
+                    originalMaterials[rig] = rig.mainSkin.material;
+                }
+
+                rig.mainSkin.material = outlineChamMaterialCache[rig];
+            }
+        }
+
+        public static void CleanupOutlineChams()
+        {
+            foreach (var kvp in outlineChamMaterialCache)
+            {
+                if (kvp.Key != null && kvp.Key.mainSkin != null)
+                {
+                    if (originalMaterials.ContainsKey(kvp.Key))
+                        kvp.Key.mainSkin.material = originalMaterials[kvp.Key];
+                }
+                if (kvp.Value != null)
+                    GameObject.Destroy(kvp.Value);
+            }
+            outlineChamMaterialCache.Clear();
+        }
+        public static void WireframeChams()
+        {
+            if (GorillaParent.instance == null || Core.CachedActiveRigs == null || Core.CachedActiveRigs.Length == 0)
+                return;
+
+            if (GorillaTagger.Instance == null)
+                return;
+
+            VRRig[] currentRigs = Core.CachedActiveRigs;
+
+            foreach (VRRig rig in currentRigs)
+            {
+                if (rig == null || rig == GorillaTagger.Instance.offlineVRRig)
+                    continue;
+
+                if (rig.mainSkin == null)
+                    continue;
+
+                if (!wireframeChamMaterialCache.ContainsKey(rig))
+                {
+                    Shader wireframeShader = Shader.Find("VR/SpatialMapping/Wireframe");
+                    if (wireframeShader == null) wireframeShader = Core.GuiTextShader;
+
+                    Material wireframeMaterial = new Material(wireframeShader);
+                    wireframeMaterial.SetColor("_Color", Core.BaseColor);
+                    wireframeMaterial.SetFloat("_WireframeSize", 0.5f);
+
+                    wireframeChamMaterialCache[rig] = wireframeMaterial;
+                    originalMaterials[rig] = rig.mainSkin.material;
+                }
+
+                rig.mainSkin.material = wireframeChamMaterialCache[rig];
+                rig.mainSkin.material.color = Core.BaseColor;
+            }
+        }
+
+        public static void CleanupWireframeChams()
+        {
+            foreach (var kvp in wireframeChamMaterialCache)
+            {
+                if (kvp.Key != null && kvp.Key.mainSkin != null)
+                {
+                    if (originalMaterials.ContainsKey(kvp.Key))
+                        kvp.Key.mainSkin.material = originalMaterials[kvp.Key];
+                }
+                if (kvp.Value != null)
+                    GameObject.Destroy(kvp.Value);
+            }
+            wireframeChamMaterialCache.Clear();
+        }
+        public static void HologramChams()
+        {
+            if (GorillaParent.instance == null || Core.CachedActiveRigs == null || Core.CachedActiveRigs.Length == 0)
+                return;
+
+            if (GorillaTagger.Instance == null)
+                return;
+
+            VRRig[] currentRigs = Core.CachedActiveRigs;
+
+            foreach (VRRig rig in currentRigs)
+            {
+                if (rig == null || rig == GorillaTagger.Instance.offlineVRRig)
+                    continue;
+
+                if (rig.mainSkin == null)
+                    continue;
+
+                if (!hologramChamMaterialCache.ContainsKey(rig))
+                {
+                    Material hologramMaterial = new Material(Core.GuiTextShader);
+                    Color hologramColor2 = Core.BaseColor;
+                    hologramColor2.a = 0.5f;
+                    hologramMaterial.color = hologramColor2;
+                    hologramMaterial.SetFloat("_Mode", 3); // Transparent mode
+                    hologramMaterial.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+                    hologramMaterial.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+                    hologramMaterial.SetInt("_ZWrite", 0);
+                    hologramMaterial.EnableKeyword("_ALPHABLEND_ON");
+                    hologramMaterial.renderQueue = 3000;
+
+                    hologramChamMaterialCache[rig] = hologramMaterial;
+                    originalMaterials[rig] = rig.mainSkin.material;
+                }
+
+                rig.mainSkin.material = hologramChamMaterialCache[rig];
+                Color hologramColor = Core.BaseColor;
+                hologramColor.a = 0.5f;
+                rig.mainSkin.material.color = hologramColor;
+            }
+        }
+
+        public static void CleanupHologramChams()
+        {
+            foreach (var kvp in hologramChamMaterialCache)
+            {
+                if (kvp.Key != null && kvp.Key.mainSkin != null)
+                {
+                    if (originalMaterials.ContainsKey(kvp.Key))
+                        kvp.Key.mainSkin.material = originalMaterials[kvp.Key];
+                }
+                if (kvp.Value != null)
+                    GameObject.Destroy(kvp.Value);
+            }
+            hologramChamMaterialCache.Clear();
+        }
+        public static void MetallicChams()
+        {
+            if (GorillaParent.instance == null || Core.CachedActiveRigs == null || Core.CachedActiveRigs.Length == 0)
+                return;
+
+            if (GorillaTagger.Instance == null)
+                return;
+
+            VRRig[] currentRigs = Core.CachedActiveRigs;
+
+            foreach (VRRig rig in currentRigs)
+            {
+                if (rig == null || rig == GorillaTagger.Instance.offlineVRRig)
+                    continue;
+
+                if (rig.mainSkin == null)
+                    continue;
+
+                if (!metallicChamMaterialCache.ContainsKey(rig))
+                {
+                    Material metallicMaterial = new Material(Core.GuiTextShader);
+                    metallicMaterial.SetFloat("_Glossiness", 0.5f);
+                    metallicMaterial.SetFloat("_Metallic", 1f);
+
+                    metallicChamMaterialCache[rig] = metallicMaterial;
+                    originalMaterials[rig] = rig.mainSkin.material;
+                }
+
+                rig.mainSkin.material = metallicChamMaterialCache[rig];
+                rig.mainSkin.material.color = Core.BaseColor;
+            }
+        }
+
+        public static void CleanupMetallicChams()
+        {
+            foreach (var kvp in metallicChamMaterialCache)
+            {
+                if (kvp.Key != null && kvp.Key.mainSkin != null)
+                {
+                    if (originalMaterials.ContainsKey(kvp.Key))
+                        kvp.Key.mainSkin.material = originalMaterials[kvp.Key];
+                }
+                if (kvp.Value != null)
+                    GameObject.Destroy(kvp.Value);
+            }
+            metallicChamMaterialCache.Clear();
+        }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         public static void InfectionBoneESP()
         {
             if (GorillaParent.instance == null || Core.CachedActiveRigs == null || Core.CachedActiveRigs.Length == 0)
@@ -1428,7 +1828,7 @@ namespace Juul
             int numBoneConnections = bones.Length / 2;
             LineLib.Line[] lines = new LineLib.Line[numBoneConnections];
 
-            Color boneColor = Infected(rig) ? Color.red : Core.BaseColor;
+            Color boneColor = Infected(rig) ? Color.red : Color.green;
 
             for (int i = 0; i < bones.Length; i += 2)
             {
@@ -1468,7 +1868,7 @@ namespace Juul
             if (lines == null || lines.Length == 0)
                 return;
 
-            Color boneColor = Infected(rig) ? Color.red : Core.BaseColor;
+            Color boneColor = Infected(rig) ? Color.red : Color.green;
 
             for (int i = 0; i < bones.Length; i += 2)
             {
@@ -1853,6 +2253,729 @@ namespace Juul
             box3DV2LineCache.Clear();
         }
 
+        private static Dictionary<VRRig, Canvas> modCheckerCanvases = new Dictionary<VRRig, Canvas>();
+        private static Dictionary<VRRig, UnityEngine.UI.Text> modCheckerTexts = new Dictionary<VRRig, UnityEngine.UI.Text>();
+
+        public static void ModCheckerGun()
+        {
+            foreach (var kvp in modCheckerCanvases)
+            {
+                if (kvp.Value != null && Camera.main != null)
+                {
+                    Vector3 direction = Camera.main.transform.position - kvp.Value.transform.position;
+                    kvp.Value.transform.rotation = Quaternion.LookRotation(direction);
+                }
+            }
+
+            GunLib.StartPointerSystem(() =>
+            {
+                if (GunLib.LockedPlayer == null)
+                    return;
+                VRRig targetRig = GunLib.LockedPlayer;
+                Photon.Realtime.Player targetPhotonPlayer = null;
+                foreach (var player in PhotonNetwork.PlayerList)
+                {
+                    if (player.NickName == targetRig.playerNameVisible)
+                    {
+                        targetPhotonPlayer = player;
+                        break;
+                    }
+                }
+                if (targetPhotonPlayer == null)
+                    return;
+                ExitGames.Client.Photon.Hashtable customProperties = targetPhotonPlayer.CustomProperties;
+                string displayText = $"{targetRig.playerText1}\n";
+
+                if (customProperties.Count == 0)
+                {
+                    displayText += "<color=grey>No custom properties</color>";
+                }
+                else
+                {
+                    foreach (DictionaryEntry entry in customProperties)
+                    {
+                        string key = entry.Key.ToString();
+                        string value = entry.Value?.ToString() ?? "null";
+                        if (value.Length > 30)
+                            value = value.Substring(0, 27) + "...";
+
+                        displayText += $"<color=cyan>{key}</color>: <color=white>{value}</color>\n";
+                    }
+                }
+                if (!modCheckerCanvases.ContainsKey(targetRig))
+                {
+                    GameObject canvasObj = new GameObject($"ModChecker_{targetRig.playerText1}");
+                    canvasObj.transform.SetParent(targetRig.head.rigTarget);
+                    canvasObj.transform.localPosition = new Vector3(0f, 0.55f, 0f);
+                    canvasObj.transform.localRotation = Quaternion.identity;
+                    Canvas canvas = canvasObj.AddComponent<Canvas>();
+                    canvas.renderMode = RenderMode.WorldSpace;
+                    GameObject textObj = new GameObject("ModCheckerText");
+                    textObj.transform.SetParent(canvasObj.transform);
+                    textObj.transform.localPosition = Vector3.zero;
+                    textObj.transform.localRotation = Quaternion.identity;
+                    textObj.transform.localScale = Vector3.one;
+                    UnityEngine.UI.Text text = textObj.AddComponent<UnityEngine.UI.Text>();
+                    text.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+                    text.fontSize = 18;
+                    text.color = Color.white;
+                    text.alignment = TextAnchor.MiddleCenter;
+                    text.fontStyle = FontStyle.Bold;
+                    text.horizontalOverflow = HorizontalWrapMode.Wrap;
+                    text.verticalOverflow = VerticalWrapMode.Overflow;
+                    RectTransform rectTransform = textObj.GetComponent<RectTransform>();
+                    rectTransform.sizeDelta = new Vector2(400f, 200f);
+                    canvasObj.transform.localScale = Vector3.one * 0.0035f;
+                    modCheckerCanvases[targetRig] = canvas;
+                    modCheckerTexts[targetRig] = text;
+                }
+                if (modCheckerTexts.TryGetValue(targetRig, out var textComponent))
+                {
+                    textComponent.text = displayText;
+                }
+                GorillaTagger.Instance.StartCoroutine(DestroyModCheckerAfterDelay(targetRig, 1f));
+            }, true);
+        }
+
+        private static IEnumerator DestroyModCheckerAfterDelay(VRRig rig, float delay)
+        {
+            yield return new WaitForSeconds(delay);
+
+            if (modCheckerCanvases.ContainsKey(rig))
+            {
+                if (modCheckerCanvases[rig] != null)
+                    GameObject.Destroy(modCheckerCanvases[rig].gameObject);
+                modCheckerCanvases.Remove(rig);
+                modCheckerTexts.Remove(rig);
+            }
+        }
+
+        public static void CleanupModCheckers()
+        {
+            foreach (var canvas in modCheckerCanvases.Values)
+            {
+                if (canvas != null)
+                    GameObject.Destroy(canvas.gameObject);
+            }
+            modCheckerCanvases.Clear();
+            modCheckerTexts.Clear();
+        }
+        private static Dictionary<VRRig, LineLib.Line[]> star3DLineCache = new Dictionary<VRRig, LineLib.Line[]>();
+        private static Dictionary<VRRig, LineLib.Line[]> star2DLineCache = new Dictionary<VRRig, LineLib.Line[]>();
+
+        public static void Star3DESP()
+        {
+            if (GorillaParent.instance == null || Core.CachedActiveRigs == null || Core.CachedActiveRigs.Length == 0)
+                return;
+
+            if (GorillaTagger.Instance == null)
+                return;
+
+            VRRig[] currentRigs = Core.CachedActiveRigs;
+            HashSet<VRRig> activeRigs = new HashSet<VRRig>();
+
+            foreach (VRRig rig in currentRigs)
+            {
+                if (rig == null || rig == GorillaTagger.Instance.offlineVRRig)
+                    continue;
+
+                if (rig.head == null || rig.head.rigTarget == null)
+                {
+                    if (star3DLineCache.ContainsKey(rig))
+                    {
+                        foreach (var line in star3DLineCache[rig])
+                            if (line != null) line.SetActive(false);
+                    }
+                    continue;
+                }
+
+                activeRigs.Add(rig);
+
+                if (!star3DLineCache.ContainsKey(rig))
+                {
+                    Create3DStarForRig(rig);
+                }
+                else
+                {
+                    Update3DStarForRig(rig);
+                }
+            }
+
+            CleanupDisconnected3DStars(activeRigs);
+        }
+
+        private static Vector3[] Get3DStarPoints(VRRig rig)
+        {
+            Vector3 headPos = rig.head.rigTarget.position;
+            Vector3 center = headPos;
+
+            float outerRadius = 0.8f;
+            float innerRadius = 0.35f;
+            int points = 5;
+
+            Vector3 forward = rig.head.rigTarget.forward;
+            forward.y = 0;
+            forward.Normalize();
+            if (forward.sqrMagnitude < 0.001f) forward = Vector3.forward;
+
+            Vector3 right = Vector3.Cross(Vector3.up, forward).normalized;
+            Vector3 up = Vector3.up;
+
+            Vector3[] starPoints = new Vector3[points * 2];
+
+            for (int i = 0; i < points * 2; i++)
+            {
+                float angle = (i * Mathf.PI * 2f) / (points * 2) - Mathf.PI / 2f;
+                float radius = (i % 2 == 0) ? outerRadius : innerRadius;
+
+                float x = Mathf.Cos(angle) * radius;
+                float z = Mathf.Sin(angle) * radius;
+
+                starPoints[i] = center + right * x + forward * z;
+            }
+
+            return starPoints;
+        }
+
+        private static void Create3DStarForRig(VRRig rig)
+        {
+            Vector3[] starPoints = Get3DStarPoints(rig);
+            int numLines = starPoints.Length;
+            LineLib.Line[] lines = new LineLib.Line[numLines];
+
+            float dist = Core.CachedMainCamera != null ? Vector3.Distance(Core.CachedMainCamera.transform.position, rig.head.rigTarget.position) : 1f;
+            float scaledWidth = boxWidth * Mathf.Clamp(dist * 0.15f, 0.5f, 2.0f);
+
+            for (int i = 0; i < numLines; i++)
+            {
+                int nextIndex = (i + 1) % numLines;
+                lines[i] = LineLib.CreateLine(starPoints[i], starPoints[nextIndex], scaledWidth, Core.BaseColor);
+            }
+
+            star3DLineCache[rig] = lines;
+        }
+
+        private static void Update3DStarForRig(VRRig rig)
+        {
+            if (!star3DLineCache.ContainsKey(rig))
+                return;
+
+            LineLib.Line[] lines = star3DLineCache[rig];
+            if (lines == null || lines.Length == 0)
+            {
+                star3DLineCache.Remove(rig);
+                Create3DStarForRig(rig);
+                return;
+            }
+
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (lines[i] == null || lines[i].gameObject == null || lines[i].lineRenderer == null)
+                {
+                    foreach (var l in lines)
+                    {
+                        if (l != null && l.gameObject != null)
+                            LineLib.DeleteLine(l);
+                    }
+                    star3DLineCache.Remove(rig);
+                    Create3DStarForRig(rig);
+                    return;
+                }
+            }
+
+            Vector3[] starPoints = Get3DStarPoints(rig);
+            float dist = Core.CachedMainCamera != null ? Vector3.Distance(Core.CachedMainCamera.transform.position, rig.head.rigTarget.position) : 1f;
+            float scaledWidth = boxWidth * Mathf.Clamp(dist * 0.15f, 0.5f, 2.0f);
+
+            for (int i = 0; i < starPoints.Length; i++)
+            {
+                int nextIndex = (i + 1) % starPoints.Length;
+                lines[i].UpdatePosition(starPoints[i], starPoints[nextIndex]);
+                lines[i].UpdateColor(Core.BaseColor);
+                lines[i].UpdateWidth(scaledWidth);
+                lines[i].SetActive(true);
+            }
+        }
+
+        private static void CleanupDisconnected3DStars(HashSet<VRRig> activeRigs)
+        {
+            List<VRRig> rigsToRemove = new List<VRRig>();
+
+            foreach (var kvp in star3DLineCache)
+            {
+                if (!activeRigs.Contains(kvp.Key) || kvp.Key == null)
+                {
+                    if (kvp.Value != null)
+                    {
+                        foreach (LineLib.Line line in kvp.Value)
+                        {
+                            if (line != null)
+                                LineLib.DeleteLine(line);
+                        }
+                    }
+                    rigsToRemove.Add(kvp.Key);
+                }
+            }
+
+            foreach (VRRig rig in rigsToRemove)
+            {
+                star3DLineCache.Remove(rig);
+            }
+        }
+
+        
+
+
+
+
+        private static Dictionary<VRRig, GameObject> platformNametagCache = new Dictionary<VRRig, GameObject>();
+        private static Dictionary<VRRig, GameObject> platformIconCache = new Dictionary<VRRig, GameObject>();
+
+        public static void PlatformNametagESP()
+        {
+            if (GorillaParent.instance == null || Core.CachedActiveRigs == null || Core.CachedActiveRigs.Length == 0)
+                return;
+
+            if (GorillaTagger.Instance == null)
+                return;
+
+            VRRig[] currentRigs = Core.CachedActiveRigs;
+            HashSet<VRRig> activeRigs = new HashSet<VRRig>();
+
+            foreach (VRRig rig in currentRigs)
+            {
+                if (rig == null || rig == GorillaTagger.Instance.offlineVRRig)
+                    continue;
+
+                if (rig.head == null || rig.head.rigTarget == null)
+                    continue;
+
+                activeRigs.Add(rig);
+
+                if (!platformNametagCache.ContainsKey(rig))
+                {
+                    CreatePlatformNametag(rig);
+                }
+                else
+                {
+                    UpdatePlatformNametag(rig);
+                }
+            }
+
+            CleanupInactiveNametags(activeRigs);
+        }
+
+        private static void CreatePlatformNametag(VRRig rig)
+        {
+            GameObject canvasObj = new GameObject($"{rig.gameObject.name}_PlatformNametag");
+            canvasObj.transform.SetParent(rig.head.rigTarget);
+            canvasObj.transform.localPosition = new Vector3(0f, 0.7f, 0f);
+            canvasObj.transform.localRotation = Quaternion.identity;
+
+            Canvas canvas = canvasObj.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.WorldSpace;
+
+            GameObject textObj = new GameObject("PlatformText");
+            textObj.transform.SetParent(canvasObj.transform);
+            textObj.transform.localPosition = new Vector3(0.2f, -0.1f, 0f);
+            textObj.transform.localRotation = Quaternion.identity;
+
+            Text text = textObj.AddComponent<Text>();
+            text.font = Core.MenuFont;
+            text.fontSize = 20;
+            text.color = Color.white;
+            text.alignment = TextAnchor.MiddleLeft;
+            text.fontStyle = FontStyle.Bold;
+
+            RectTransform textRect = textObj.GetComponent<RectTransform>();
+            textRect.sizeDelta = new Vector2(150f, 50f);
+
+            canvasObj.transform.localScale = Vector3.one * 0.005f;
+
+            platformNametagCache[rig] = canvasObj;
+
+            CreatePlatformIcon(rig, canvasObj);
+        }
+
+        private static void CreatePlatformIcon(VRRig rig, GameObject parentCanvas)
+        {
+            string platformName = "UNKNOWN";
+            bool isSteam = false;
+
+            if (rig.Creator != null)
+            {
+                try
+                {
+                    var fieldInfo = rig.Creator.GetType().GetField("cosmetics");
+                    if (fieldInfo != null)
+                    {
+                        string cosmetics = fieldInfo.GetValue(rig.Creator) as string ?? "";
+                        isSteam = cosmetics.Contains("FIRST LOGIN");
+                        platformName = isSteam ? "STEAM" : "OCULUS";
+                    }
+                }
+                catch { }
+            }
+
+            string iconUrl = isSteam
+                ? "https://e7.pngegg.com/pngimages/699/999/png-clipart-brand-logo-steam-gump-s.png"
+                : "https://w7.pngwing.com/pngs/623/320/png-transparent-oculus-horizontal-hd-logo.png";
+
+            string fileName = isSteam ? "steam_icon.png" : "oculus_icon.png";
+            Texture2D iconTexture = Textures.LoadTextureFromURL(iconUrl, fileName);
+
+            if (iconTexture == null)
+                return;
+
+            GameObject iconObj = new GameObject("PlatformIcon");
+            iconObj.transform.SetParent(parentCanvas.transform);
+            iconObj.transform.localPosition = new Vector3(-0.3f, -0.1f, 0f);
+            iconObj.transform.localRotation = Quaternion.identity;
+
+            RawImage rawImage = iconObj.AddComponent<RawImage>();
+            rawImage.texture = iconTexture;
+
+            RectTransform iconRect = iconObj.GetComponent<RectTransform>();
+            iconRect.sizeDelta = new Vector2(40f, 40f);
+            iconObj.transform.localScale = Vector3.one * 0.002f;
+
+            platformIconCache[rig] = iconObj;
+        }
+
+        private static void UpdatePlatformNametag(VRRig rig)
+        {
+            if (!platformNametagCache.ContainsKey(rig))
+                return;
+
+            GameObject canvasObj = platformNametagCache[rig];
+            if (canvasObj == null)
+                return;
+
+            Text text = canvasObj.GetComponentInChildren<Text>();
+            if (text != null)
+            {
+                string platformName = "UNKNOWN";
+                bool isSteam = false;
+
+                if (rig.Creator != null)
+                {
+                    try
+                    {
+                        var fieldInfo = rig.Creator.GetType().GetField("cosmetics");
+                        if (fieldInfo != null)
+                        {
+                            string cosmetics = fieldInfo.GetValue(rig.Creator) as string ?? "";
+                            isSteam = cosmetics.Contains("FIRST LOGIN");
+                            platformName = isSteam ? "STEAM" : "OCULUS";
+                        }
+                    }
+                    catch { }
+                }
+
+                text.text = platformName;
+
+                text.color = isSteam ? new Color(0.2f, 0.6f, 1f) : new Color(0.3f, 0.3f, 0.3f);
+            }
+
+            Camera mainCamera = Core.CachedMainCamera;
+            if (mainCamera != null && canvasObj != null)
+            {
+                canvasObj.transform.LookAt(canvasObj.transform.position + mainCamera.transform.rotation * Vector3.forward, mainCamera.transform.rotation * Vector3.up);
+            }
+        }
+
+        private static void CleanupInactiveNametags(HashSet<VRRig> activeRigs)
+        {
+            List<VRRig> rigsToRemove = new List<VRRig>();
+
+            foreach (var kvp in platformNametagCache)
+            {
+                if (!activeRigs.Contains(kvp.Key) || kvp.Key == null)
+                {
+                    if (kvp.Value != null)
+                    {
+                        GameObject.Destroy(kvp.Value);
+                    }
+                    rigsToRemove.Add(kvp.Key);
+                }
+            }
+
+            foreach (VRRig rig in rigsToRemove)
+            {
+                platformNametagCache.Remove(rig);
+            }
+
+            rigsToRemove.Clear();
+            foreach (var kvp in platformIconCache)
+            {
+                if (!activeRigs.Contains(kvp.Key) || kvp.Key == null)
+                {
+                    if (kvp.Value != null)
+                    {
+                        GameObject.Destroy(kvp.Value);
+                    }
+                    rigsToRemove.Add(kvp.Key);
+                }
+            }
+
+            foreach (VRRig rig in rigsToRemove)
+            {
+                platformIconCache.Remove(rig);
+            }
+        }
+
+        public static void CleanupPlatformNametags()
+        {
+            foreach (var kvp in platformNametagCache)
+            {
+                if (kvp.Value != null)
+                {
+                    GameObject.Destroy(kvp.Value);
+                }
+            }
+            platformNametagCache.Clear();
+
+            foreach (var kvp in platformIconCache)
+            {
+                if (kvp.Value != null)
+                {
+                    GameObject.Destroy(kvp.Value);
+                }
+            }
+            platformIconCache.Clear();
+        }
+        public static void FPSBoost1()
+        {
+            // Set ultra low resolution
+            QualitySettings.SetQualityLevel(0, true);
+            QualitySettings.antiAliasing = 0;
+            QualitySettings.shadows = ShadowQuality.Disable;
+            QualitySettings.softParticles = false;
+            QualitySettings.softVegetation = false;
+            QualitySettings.realtimeReflectionProbes = false;
+            QualitySettings.particleRaycastBudget = 0;
+            QualitySettings.maximumLODLevel = 0;
+            QualitySettings.lodBias = 0.5f;
+            QualitySettings.masterTextureLimit = 4;
+            QualitySettings.globalTextureMipmapLimit = 4;
+            if (Camera.main != null)
+            {
+                Camera.main.allowMSAA = false;
+                Camera.main.forceIntoRenderTexture = false;
+            }
+            Light[] lights = GameObject.FindObjectsOfType<Light>();
+            foreach (Light light in lights)
+            {
+                light.shadows = LightShadows.None;
+            }
+        }
+
+        public static void FPSBoost2()
+        {
+            QualitySettings.SetQualityLevel(0, true);
+            QualitySettings.antiAliasing = 0;
+            QualitySettings.shadows = ShadowQuality.Disable;
+            QualitySettings.softParticles = false;
+            QualitySettings.softVegetation = false;
+            QualitySettings.realtimeReflectionProbes = false;
+            QualitySettings.particleRaycastBudget = 0;
+            QualitySettings.maximumLODLevel = 0;
+            QualitySettings.lodBias = 0.2f;
+            QualitySettings.masterTextureLimit = 5;
+            QualitySettings.globalTextureMipmapLimit = 5;
+            QualitySettings.vSyncCount = 0;
+            Shader.globalMaximumLOD = 100;
+            Light[] lights = GameObject.FindObjectsOfType<Light>();
+            foreach (Light light in lights)
+            {
+                light.shadows = LightShadows.None;
+            }
+            ParticleSystem[] particles = GameObject.FindObjectsOfType<ParticleSystem>();
+            foreach (ParticleSystem ps in particles)
+            {
+                ps.Stop();
+                ps.gameObject.SetActive(false);
+            }
+        }
+        private static Dictionary<VRRig, LineLib.Line[]> circle3DLineCache = new Dictionary<VRRig, LineLib.Line[]>();
+        public static void Circle3DESP()
+        {
+            if (GorillaParent.instance == null || Core.CachedActiveRigs == null || Core.CachedActiveRigs.Length == 0)
+                return;
+
+            if (GorillaTagger.Instance == null)
+                return;
+
+            VRRig[] currentRigs = Core.CachedActiveRigs;
+            HashSet<VRRig> activeRigs = new HashSet<VRRig>();
+
+            foreach (VRRig rig in currentRigs)
+            {
+                if (rig == null || rig == GorillaTagger.Instance.offlineVRRig)
+                    continue;
+
+                if (rig.head == null || rig.head.rigTarget == null)
+                    continue;
+
+                activeRigs.Add(rig);
+
+                if (!circle3DLineCache.ContainsKey(rig))
+                {
+                    Create3DCircleForRig(rig);
+                }
+                else
+                {
+                    Update3DCircleForRig(rig);
+                }
+            }
+
+            CleanupDisconnected3DCircles(activeRigs);
+        }
+
+        private static Vector3[] Get3DCirclePoints(VRRig rig, int segments = 24)
+        {
+            Vector3 headPos = rig.head.rigTarget.position;
+            Vector3 center = headPos;
+            float radius = 0.6f;
+
+            Vector3 forward = rig.head.rigTarget.forward;
+            forward.y = 0;
+            forward.Normalize();
+            if (forward.sqrMagnitude < 0.001f) forward = Vector3.forward;
+
+            Vector3 right = Vector3.Cross(Vector3.up, forward).normalized;
+
+            Vector3[] points = new Vector3[segments];
+
+            for (int i = 0; i < segments; i++)
+            {
+                float angle = (i * Mathf.PI * 2f) / segments;
+                float x = Mathf.Cos(angle) * radius;
+                float z = Mathf.Sin(angle) * radius;
+                points[i] = center + right * x + forward * z;
+            }
+
+            return points;
+        }
+
+        private static void Create3DCircleForRig(VRRig rig)
+        {
+            Vector3[] circlePoints = Get3DCirclePoints(rig);
+            int numLines = circlePoints.Length;
+            LineLib.Line[] lines = new LineLib.Line[numLines];
+
+            float dist = Core.CachedMainCamera != null ? Vector3.Distance(Core.CachedMainCamera.transform.position, rig.head.rigTarget.position) : 1f;
+            float scaledWidth = boxWidth * Mathf.Clamp(dist * 0.15f, 0.5f, 2.0f);
+
+            for (int i = 0; i < numLines; i++)
+            {
+                int nextIndex = (i + 1) % numLines;
+                lines[i] = LineLib.CreateLine(circlePoints[i], circlePoints[nextIndex], scaledWidth, Core.BaseColor);
+            }
+
+            circle3DLineCache[rig] = lines;
+        }
+
+        private static void Update3DCircleForRig(VRRig rig)
+        {
+            if (!circle3DLineCache.ContainsKey(rig)) return;
+            LineLib.Line[] lines = circle3DLineCache[rig];
+            if (lines == null || lines.Length == 0)
+            {
+                circle3DLineCache.Remove(rig);
+                Create3DCircleForRig(rig);
+                return;
+            }
+
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (lines[i] == null || lines[i].gameObject == null || lines[i].lineRenderer == null)
+                {
+                    foreach (var l in lines) if (l != null && l.gameObject != null) LineLib.DeleteLine(l);
+                    circle3DLineCache.Remove(rig);
+                    Create3DCircleForRig(rig);
+                    return;
+                }
+            }
+
+            Vector3[] circlePoints = Get3DCirclePoints(rig);
+            float dist = Core.CachedMainCamera != null ? Vector3.Distance(Core.CachedMainCamera.transform.position, rig.head.rigTarget.position) : 1f;
+            float scaledWidth = boxWidth * Mathf.Clamp(dist * 0.15f, 0.5f, 2.0f);
+
+            for (int i = 0; i < circlePoints.Length; i++)
+            {
+                int nextIndex = (i + 1) % circlePoints.Length;
+                lines[i].UpdatePosition(circlePoints[i], circlePoints[nextIndex]);
+                lines[i].UpdateColor(Core.BaseColor);
+                lines[i].UpdateWidth(scaledWidth);
+                lines[i].SetActive(true);
+            }
+        }
+
+        private static void CleanupDisconnected3DCircles(HashSet<VRRig> activeRigs)
+        {
+            List<VRRig> rigsToRemove = new List<VRRig>();
+            foreach (var kvp in circle3DLineCache)
+            {
+                if (!activeRigs.Contains(kvp.Key) || kvp.Key == null)
+                {
+                    if (kvp.Value != null)
+                        foreach (var l in kvp.Value) if (l != null) LineLib.DeleteLine(l);
+                    rigsToRemove.Add(kvp.Key);
+                }
+            }
+            foreach (VRRig rig in rigsToRemove) circle3DLineCache.Remove(rig);
+        }
+
+        public static void CleanupCircle3DESP()
+        {
+            foreach (var kvp in circle3DLineCache)
+                if (kvp.Value != null)
+                    foreach (var l in kvp.Value) if (l != null) LineLib.DeleteLine(l);
+            circle3DLineCache.Clear();
+        }
+        public static void DisableSnowfall()
+        {
+            GameObject.Find("Environment Objects/LocalObjects_Prefab/Forest/Environment/WeatherDayNight/snow/").SetActive(false);
+        }
+        public static void EnableSnowfall()
+        {
+            GameObject.Find("Environment Objects/LocalObjects_Prefab/Forest/Environment/WeatherDayNight/snow/").SetActive(true);
+        }
+        public static void DisableRain()
+        {
+            GameObject.Find("Environment Objects/LocalObjects_Prefab/Forest/Environment/WeatherDayNight/rain/").SetActive(false);
+        }
+        public static void EnableRain()
+        {
+            GameObject.Find("Environment Objects/LocalObjects_Prefab/Forest/Environment/WeatherDayNight/rain/").SetActive(true);
+        }
+
+       
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     }
 }
+
+

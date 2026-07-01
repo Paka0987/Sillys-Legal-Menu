@@ -1,22 +1,24 @@
-﻿using System;
+using BepInEx;
+using HarmonyLib;
+using System;
 using System.Collections;
 using System.Reflection;
-using BepInEx;
 using UnityEngine;
-using HarmonyLib;
 
 namespace Juul
 {
     [BepInPlugin(guid, title, version)]
     public class Plugin : BaseUnityPlugin
     {
+        public static Plugin Instance { get; private set; }
         public const string guid = "Juul";
         public const string title = "Juul";
-        public const string version = "2.5";
+        public const string version = "4.0.0";
         private GameObject coreObject;
 
         void Awake()
         {
+            Instance = this;
             try
             {
                 var harmony = new Harmony(guid);
@@ -24,11 +26,16 @@ namespace Juul
             }
             catch (Exception e)
             {
-               
+
             }
             coreObject = new GameObject("JuulCore");
             UnityEngine.Object.DontDestroyOnLoad(coreObject);
             StartCoroutine(DelayedInitialize());
+
+        }
+
+        private void Update()
+        {
         }
 
         private IEnumerator DelayedInitialize()
@@ -67,7 +74,9 @@ namespace Juul
             }
             try
             {
+                Debug.Log("[Juul] Total Mods: " + ExtraButtons.CountAllButtons());
                 Audios.Play("Loaded");
+
             }
             catch (Exception e)
             {

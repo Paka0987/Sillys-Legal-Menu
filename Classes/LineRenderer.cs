@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Juul
@@ -212,3 +212,4 @@ namespace Juul
         }
     }
 }
+

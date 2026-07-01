@@ -1,4 +1,4 @@
-﻿
+
 using System;
 using System.Reflection;
 
@@ -9,4 +9,5 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyProductAttribute("Juul")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Juul")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
+
 

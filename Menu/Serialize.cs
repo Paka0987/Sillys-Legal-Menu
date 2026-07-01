@@ -1,4 +1,4 @@
-﻿using ExitGames.Client.Photon;
+using ExitGames.Client.Photon;
 using Photon.Pun;
 using Photon.Realtime;
 using System;
@@ -11,7 +11,6 @@ namespace Juul
 {
     internal class Serialize2
     {
-
         public static void Serialize(PhotonView pv, RaiseEventOptions options = null, int timeOffset = 0, float delay = 0f)
         {
             if (!PhotonNetwork.InRoom || pv == null)
@@ -57,3 +56,4 @@ namespace Juul
         }
     }
 }
+

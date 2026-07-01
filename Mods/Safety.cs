@@ -1,4 +1,5 @@
 using ExitGames.Client.Photon;
+using GorillaLocomotion;
 using GorillaNetworking;
 using HarmonyLib;
 using Photon.Pun;
@@ -12,8 +13,11 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
+using System.Threading.Tasks;
 using Unity.XR.CoreUtils;
 using UnityEngine;
+using UnityEngine.InputSystem;
+using UnityEngine.SocialPlatforms;
 using Debug = UnityEngine.Debug;
 using Hashtable = ExitGames.Client.Photon.Hashtable;
 using Object = UnityEngine.Object;
@@ -32,176 +36,6 @@ namespace Juul
                 GameObject.Destroy(KIDManager.Instance);
             }
         }
-        public static void AntiRPCKick()
-        {
-            try
-            {
-                AntiRPCKicker();
-                Type gorillaNotType = typeof(MonkeAgent);
-                MonkeAgent gorillaInstance = MonkeAgent.instance;
-                if (gorillaInstance == null)
-                    return;
-                MonkeAgent.instance.rpcErrorMax = int.MaxValue;
-                MonkeAgent.instance.rpcCallLimit = int.MaxValue;
-                MonkeAgent.instance.logErrorMax = int.MaxValue;
-                PhotonNetwork.MaxResendsBeforeDisconnect = int.MaxValue;
-                PhotonNetwork.QuickResends = int.MaxValue;
-                var peer = PhotonNetwork.NetworkingClient?.LoadBalancingPeer;
-                if (peer != null)
-                {
-                    peer.SentCountAllowance = int.MaxValue;
-                    peer.QuickResendAttempts = 3;
-                    peer.CrcEnabled = false;
-                    peer.UseByteArraySlicePoolForEvents = false;
-                    peer.TrafficStatsEnabled = false;
-                    peer.TrafficStatsReset();
-                    peer.SendOutgoingCommands();
-                    try
-                    {
-                        var type = peer.GetType();
-                        var queueField = type.GetField("outgoingStreamQueue", BindingFlags.NonPublic | BindingFlags.Instance);
-                        var queue = queueField?.GetValue(peer) as System.Collections.IList;
-                        queue?.Clear();
-                        var commandsField = type.GetField("commandList", BindingFlags.NonPublic | BindingFlags.Instance);
-                        var commands = commandsField?.GetValue(peer) as System.Collections.IList;
-                        commands?.Clear();
-                        var resentField = type.GetField("resentCommandsCount", BindingFlags.NonPublic | BindingFlags.Instance);
-                        resentField?.SetValue(peer, 0);
-                    }
-                    catch { }
-                }
-                PhotonNetwork.NetworkStatisticsEnabled = false;
-                ValueTuple<Type, object, string, bool>[] targets = new ValueTuple<Type, object, string, bool>[]
-                {
-                    (gorillaNotType, gorillaInstance, "rpcErrorMax", false),
-                    (gorillaNotType, gorillaInstance, "rpcCallLimit", false),
-                    (gorillaNotType, gorillaInstance, "logErrorMax", false),
-                    (gorillaNotType, gorillaInstance, "userRPCCalls", false),
-                    (gorillaNotType, gorillaInstance, "_sendReport", false),
-                    (typeof(PhotonNetwork), null, "QuickResends", true),
-                    (typeof(PhotonNetwork), null, "MaxResendsBeforeDisconnect", true)
-                };
-                foreach (var entry in targets)
-                    TrySetMember(entry.Item1, entry.Item2, entry.Item3, GetDefaultValue(entry.Item3), entry.Item4);
-                try
-                {
-                    var userRPCCallsField = gorillaNotType.GetField("userRPCCalls", BindingFlags.NonPublic | BindingFlags.Instance);
-                    var userRPCCalls = userRPCCallsField?.GetValue(gorillaInstance) as System.Collections.IDictionary;
-                    userRPCCalls?.Clear();
-                }
-                catch { }
-                PhotonNetwork.NetworkingClient.OpRaiseEvent(200, new Hashtable()
-                {
-                    { 0, GorillaTagger.Instance.myVRRig.ViewID }
-                }, new RaiseEventOptions
-                {
-                    CachingOption = (EventCaching)6,
-                    TargetActors = new int[] { PhotonNetwork.LocalPlayer.ActorNumber }
-                }, SendOptions.SendReliable);
-                if (Time.time > rpcDel)
-                {
-                    try
-                    {
-                        rpcDel = Time.time + 0.47f;
-                        PhotonNetwork.RemoveBufferedRPCs(int.MaxValue, null, null);
-                        PhotonNetwork.RemoveRPCs(PhotonNetwork.LocalPlayer);
-                        PhotonNetwork.OpCleanActorRpcBuffer(PhotonNetwork.LocalPlayer.ActorNumber);
-                        PhotonNetwork.OpCleanRpcBuffer(GorillaTagger.Instance.myVRRig.GetView);
-                        PhotonNetwork.NetworkingClient.LoadBalancingPeer.SendOutgoingCommands();
-                        Traverse yeah = Traverse.Create(typeof(PhotonNetwork));
-                        yeah.Property("ResentReliableCommands").SetValue(0);
-                        PhotonNetwork.NetworkingClient.Service();
-                        PhotonNetwork.NetworkingClient.OpChangeGroups(null, new byte[] { 1, 2, 3, 4 });
-                        PhotonNetwork.NetworkingClient.LoadBalancingPeer.TrafficStatsReset();
-                        try
-                        {
-                            var system = AppDomain.CurrentDomain.GetAssemblies()
-                                .First(a => a.GetName().Name == "Assembly-CSharp")
-                                .GetType("RoomSystem");
-
-                            system.GetMethod("OnPlayerLeftRoom", BindingFlags.NonPublic | BindingFlags.Instance)
-                                .Invoke(null, new object[] { NetworkSystem.Instance.LocalPlayer });
-                        }
-                        catch { }
-                        try
-                        {
-                            NetSystemState state = new NetSystemState();
-                            PeerStateValue val = new PeerStateValue();
-                            state.Equals(NetSystemState.Connecting);
-                            val.Equals(PeerStateValue.Connected);
-                            RunViewUpdate();
-                        }
-                        catch { }
-                        PhotonNetwork.SendAllOutgoingCommands();
-                        try
-                        {
-                            var photonViewList = typeof(PhotonNetwork).GetField("photonViewList",
-                                BindingFlags.NonPublic | BindingFlags.Static);
-                            var viewDict = photonViewList?.GetValue(null) as System.Collections.IDictionary;
-                            if (viewDict != null)
-                            {
-                                var keysToRemove = new System.Collections.ArrayList();
-                                foreach (System.Collections.DictionaryEntry entry in viewDict)
-                                {
-                                    var view = entry.Value as PhotonView;
-                                    if (view != null && view.IsMine && view.isRuntimeInstantiated)
-                                        keysToRemove.Add(entry.Key);
-                                }
-                                foreach (var key in keysToRemove)
-                                    viewDict.Remove(key);
-                            }
-                        }
-                        catch { }
-                    }
-                    catch { }
-                }
-                MethodInfo refresh = gorillaNotType.GetMethod("RefreshRPCs", BindingFlags.NonPublic | BindingFlags.Instance);
-                refresh?.Invoke(gorillaInstance, null);
-            }
-            catch { }
-        }
-        private static byte[] cachedSerializedRpc;
-
-        private static void AntiRPCKicker()
-        {
-            for (int i = 0; i < 1300; i++)
-                ResendCachedRpc();
-            try
-            {
-                var peer = PhotonNetwork.NetworkingClient.LoadBalancingPeer;
-                var field = peer.GetType().GetField("outgoingStreamQueue", BindingFlags.Instance | BindingFlags.NonPublic);
-
-                if (field != null)
-                {
-                    IList list = field.GetValue(peer) as IList;
-                    if (list != null && list.Count > 0)
-                        cachedSerializedRpc = list[list.Count - 1] as byte[];
-                }
-            }
-            catch
-            {
-                cachedSerializedRpc = null;
-            }
-        }
-
-        private static void ResendCachedRpc()
-        {
-            if (cachedSerializedRpc == null)
-                return;
-            try
-            {
-                var peer = PhotonNetwork.NetworkingClient.LoadBalancingPeer;
-                var type = peer.GetType();
-                var method = type.GetMethod("SendReliable", BindingFlags.Instance | BindingFlags.NonPublic)
-                            ?? type.GetMethod("SendUnreliable", BindingFlags.Instance | BindingFlags.NonPublic);
-                method?.Invoke(peer, new object[] { cachedSerializedRpc });
-            }
-            catch
-            {
-                SetTick(9999f);
-            }
-        }
-
         public static void SetTick(float tickMultiplier)
         {
             var photonMono = GameObject.Find("PhotonMono")?.GetComponent<PhotonHandler>();
@@ -212,40 +46,14 @@ namespace Juul
             }
         }
 
-        private static bool TrySetMember(Type type, object instance, string fieldName, object value, bool isStatic)
+        public static void FlushNetwork()
         {
             try
             {
-                var field = type.GetField(fieldName,
-                    (isStatic ? BindingFlags.Static : BindingFlags.Instance) |
-                    BindingFlags.Public | BindingFlags.NonPublic);
-                if (field != null)
-                {
-                    field.SetValue(instance, value);
-                    return true;
-                }
-                return false;
+                PhotonNetwork.SendAllOutgoingCommands();
+                PhotonNetwork.NetworkingClient.LoadBalancingPeer.SendOutgoingCommands();
             }
-            catch
-            {
-                return false;
-            }
-        }
-
-        private static object GetDefaultValue(string fieldName)
-        {
-            if (fieldName.Contains("Max") || fieldName.Contains("Limit") || fieldName.Contains("Count"))
-                return int.MaxValue;
-            if (fieldName.Contains("userRPCCalls"))
-                return null;
-            if (fieldName.Contains("_sendReport"))
-                return false;
-            return null;
-        }
-
-        public static void RPCProtection()
-        {
-            AntiRPCKick();
+            catch { }
         }
 
         public static object RunViewUpdate()
@@ -404,7 +212,7 @@ namespace Juul
         {
             if (PhotonNetwork.InRoom)
             {
-                if (ControllerInputPoller.instance.leftControllerIndexFloat > 1f)
+                if (ControllerInputPoller.instance.leftControllerIndexFloat > 0.5f || Mouse.current.leftButton.isPressed)
                 {
                     PhotonNetwork.Disconnect();
                 }
@@ -415,7 +223,7 @@ namespace Juul
         {
             if (PhotonNetwork.InRoom)
             {
-                if (ControllerInputPoller.instance.rightControllerIndexFloat > 1f)
+                if (ControllerInputPoller.instance.rightControllerIndexFloat > 0.5f || Mouse.current.rightButton.isPressed)
                 {
                     PhotonNetwork.Disconnect();
                 }
@@ -508,6 +316,13 @@ namespace Juul
             AntiReport((vrrig, position) =>
             {
                 NetworkSystem.Instance.ReturnToSinglePlayer();
+            });
+        }
+        public static void AntiReportQuit()
+        {
+            AntiReport((vrrig, position) =>
+            {
+                Application.Quit();
             });
         }
         public static void AntiReportNotify()
@@ -726,5 +541,172 @@ namespace Juul
             catch { }
         }
 
+        public static void AcceptTOS()
+        {
+            GameObject.Find("Miscellaneous Scripts/PopUpMessage").SetActive(false);
+        }
+        private static float lastRpcClear = 0f;
+        private static float rpcClearInterval = 5f;
+
+        public static void AntiCrash()
+        {
+            try
+            {
+                if (Time.time > lastRpcClear + rpcClearInterval)
+                {
+                    lastRpcClear = Time.time;
+                    if (PhotonNetwork.NetworkingClient != null)
+                    {
+                        var peer = PhotonNetwork.NetworkingClient.LoadBalancingPeer;
+                        var outgoingQueueField = peer.GetType().GetField("outgoingStreamQueue",
+                            BindingFlags.Instance | BindingFlags.NonPublic);
+                        var queue = outgoingQueueField?.GetValue(peer) as System.Collections.IList;
+                        if (queue != null && queue.Count > 1000)
+                        {
+                            queue.Clear();
+                            Debug.Log("Cleared outgoing RPC queue to prevent crash");
+                        }
+                    }
+                }
+                if (GorillaTagger.Instance == null || GorillaTagger.Instance.myVRRig == null)
+                    return;
+            }
+            catch { }
+        }
+        public static void FakeOculusMenu()
+        {
+            if (Inputs.RightPrimary)
+            {
+                NoFinger();
+                ConnectedControllerHandler.Instance.SetRightHandOffsets(
+                    new Vector3(0f, -0.2f, 0.1f),
+                    Quaternion.Euler(275f, 270f, -5f)
+                );
+                ConnectedControllerHandler.Instance.SetLeftHandOffsets(
+                    new Vector3(0f, -0.2f, 0.1f),
+                    Quaternion.Euler(275f, 90f, 5f)
+                );
+                ConnectedControllerHandler.Instance.rightHandFollower.UpdatePositionRotation();
+                ConnectedControllerHandler.Instance.leftHandFollower.UpdatePositionRotation();
+            }
+            else
+            {
+                ConnectedControllerHandler.Instance.SetOculusOffsets(true, true);
+                ConnectedControllerHandler.Instance.rightHandFollower.UpdatePositionRotation();
+                ConnectedControllerHandler.Instance.leftHandFollower.UpdatePositionRotation();
+            }
+        }
+        public static void FakeReportMenu()
+        {
+            if (Inputs.LeftSecondary)
+            {
+                NoFinger();
+                GTPlayer.Instance.InReportMenu = true;
+            }
+            else
+            {
+                GTPlayer.Instance.InReportMenu = false;
+            }
+        }
+        public static void FakeBrokenControllerRight()
+        {
+            if (Inputs.RightPrimary)
+            {
+                NoFinger();
+                ConnectedControllerHandler.Instance.overriddenControllers |= OverrideControllers.RightController;
+                ConnectedControllerHandler.Instance.UpdateControllerStates();
+            }
+            else
+            {
+                ConnectedControllerHandler.Instance.overriddenControllers &= ~OverrideControllers.RightController;
+                ConnectedControllerHandler.Instance.UpdateControllerStates();
+            }
+        }
+        public static void FakeBrokenControllerLeft()
+        {
+            if (Inputs.LeftSecondary)
+            {
+                NoFinger();
+                ConnectedControllerHandler.Instance.overriddenControllers |= OverrideControllers.LeftController;
+                ConnectedControllerHandler.Instance.UpdateControllerStates();
+            }
+            else
+            {
+                ConnectedControllerHandler.Instance.overriddenControllers &= ~OverrideControllers.LeftController;
+                ConnectedControllerHandler.Instance.UpdateControllerStates();
+            }
+        }
+        public static void FakeBadTracking()
+        {
+            if (Inputs.RightSecondary)
+            {
+                NoFinger();
+                ConnectedControllerHandler.Instance.overrideRightEnable = true;
+                ConnectedControllerHandler.Instance.overrideLeftEnable = true;
+            }
+            else
+            {
+                ConnectedControllerHandler.Instance.overrideRightEnable = false;
+                ConnectedControllerHandler.Instance.overrideLeftEnable = false;
+            }
+        }
+        public static async void CreatePublicLobby10()
+        {
+            PhotonNetworkController controller = PhotonNetworkController.Instance;
+            if (controller == null) return;
+            if (NetworkSystem.Instance.InRoom)
+            {
+                await NetworkSystem.Instance.ReturnToSinglePlayer();
+                await Task.Delay(500);
+            }
+            string roomName = GenerateRoomName();
+            RoomConfig roomConfig = new RoomConfig();
+            roomConfig.isPublic = true;
+            roomConfig.isJoinable = true;
+            roomConfig.createIfMissing = true;
+            roomConfig.MaxPlayers = 10;
+            roomConfig.CustomProps = new ExitGames.Client.Photon.Hashtable();
+            roomConfig.CustomProps.Add("gameMode", "DEFAULT");
+            roomConfig.CustomProps.Add("platform", "PC");
+            await NetworkSystem.Instance.ConnectToRoom(roomName, roomConfig);
+        }
+
+        public static async void CreatePublicLobby20()
+        {
+            PhotonNetworkController controller = PhotonNetworkController.Instance;
+            if (controller == null) return;
+            if (NetworkSystem.Instance.InRoom)
+            {
+                await NetworkSystem.Instance.ReturnToSinglePlayer();
+                await Task.Delay(500);
+            }
+            string roomName = GenerateRoomName();
+            RoomConfig roomConfig = new RoomConfig();
+            roomConfig.isPublic = true;
+            roomConfig.isJoinable = true;
+            roomConfig.createIfMissing = true;
+            roomConfig.MaxPlayers = 20;
+            roomConfig.CustomProps = new ExitGames.Client.Photon.Hashtable();
+            roomConfig.CustomProps.Add("gameMode", "DEFAULT");
+            roomConfig.CustomProps.Add("platform", "PC");
+            await NetworkSystem.Instance.ConnectToRoom(roomName, roomConfig);
+        }
+
+        private static string GenerateRoomName()
+        {
+            string chars = "ABCDEFGHIJKLMNPQRSTUVWXYZ123456789";
+            string roomName = "";
+            for (int i = 0; i < 4; i++)
+            {
+                roomName += chars[UnityEngine.Random.Range(0, chars.Length)];
+            }
+            return roomName;
+        }
+
+
+
+
+
     }
 }
+

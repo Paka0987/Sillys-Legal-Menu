@@ -1,4 +1,4 @@
-﻿using Oculus.Platform;
+using Oculus.Platform;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -10,16 +10,37 @@ namespace Juul
     {
         public string Name = "Placeholder";
         public string Description = "Placeholder button.";
-        public bool Enabled = false;
+        private bool _enabled = false;
+        public bool Enabled
+        {
+            get { return _enabled; }
+            set
+            {
+                if (_enabled == value) return;
+                _enabled = value;
+                if (_enabled)
+                {
+                    if (!Core.ActiveButtons.Contains(this))
+                        Core.ActiveButtons.Add(this);
+                }
+                else
+                {
+                    Core.ActiveButtons.Remove(this);
+                }
+            }
+        }
         public bool Toggle = true;
         public Action OnEnable = () => { };
         public Action OnDisable = () => { };
         public Action OnceEnable = () => { };
         public Action OnceDisable = () => { };
+        public Action OnUpdate = () => { };
         public bool Label = false;
         public bool Incremental = false;
         public Action Up = () => { };
         public Action Down = () => { };
+        public bool HasKeybinds = false;
+        public Category KeybindCategory = null;
         public void SetText(string NewText)
         {
             this.Name = NewText;
@@ -55,18 +76,13 @@ namespace Juul
         public Action onClick;
         private void OnTriggerEnter(Collider other)
         {
-            if (other.gameObject == Core.Pointer && Time.time > Core.ButtonCooldown)
+            if ((other.gameObject == Core.Pointer || other.gameObject == Core.Pointer2) && Time.time > Core.ButtonCooldown)
             {
                 Core.ButtonCooldown = Time.time + 0.2345f;
                 onClick?.Invoke();
                 Audios.Play("Select");
-                StartCoroutine(RebuildNextFrame());
+                Core.RebuildMenu();
             }
-        }
-        private IEnumerator RebuildNextFrame()
-        {
-            yield return null;
-            Core.RebuildMenu();
         }
     }
 
@@ -75,18 +91,13 @@ namespace Juul
         public Action onClick;
         private void OnTriggerEnter(Collider other)
         {
-            if (other.gameObject == Core.Pointer && Time.time > Core.IncrementCooldown)
+            if ((other.gameObject == Core.Pointer || other.gameObject == Core.Pointer2) && Time.time > Core.IncrementCooldown)
             {
                 Core.IncrementCooldown = Time.time + 0.15f;
                 onClick?.Invoke();
                 Audios.Play("Select");
-                StartCoroutine(RebuildNextFrame());
+                Core.RebuildMenu();
             }
-        }
-        private IEnumerator RebuildNextFrame()
-        {
-            yield return null;
-            Core.RebuildMenu();
         }
     }
 
@@ -103,3 +114,4 @@ namespace Juul
         }
     }
 }
+

@@ -13,65 +13,103 @@ namespace Juul
     {
         public static bool IsPlaying = false;
         public static float RecoverTimer = -1f;
-        public static bool HearSelf = false;
+        public static bool HearSelf = true;
         public static bool LoopAudio = false;
 
-        private static GameObject _audioObj;
-        private static AudioSource _audioSource;
-        private static Dictionary<string, AudioClip> _clipCache = new Dictionary<string, AudioClip>();
-        private static bool _loaded = false;
+        private static GameObject audioObj;
+        private static AudioSource audioSource;
+        private static Dictionary<string, AudioClip> clipCache = new Dictionary<string, AudioClip>();
+        private static bool loaded = false;
 
         public static string SoundsFolder
         {
             get
             {
-                string path = Path.Combine(Core.Folder, "Sounds");
+                string path = Path.Combine(Core.Folder, "Soundboard Audios");
                 if (!Directory.Exists(path))
                     Directory.CreateDirectory(path);
                 return path;
             }
         }
 
-        public static void PopulateSounds()
+        public static void pSounds()
         {
-            Category soundCat = Buttons.GetCategory("Soundboard");
+            Category soundCat = ExtraButtons.GetCategory("Soundboard");
             if (soundCat == null) return;
 
             soundCat.Buttons.Clear();
+            soundCat.Subcategories.Clear();
             soundCat.Buttons.Add(new Button { Name = "Stop All Sounds", Toggle = false, OnEnable = () => HaltAllAudio() });
-            soundCat.Buttons.Add(new Button { Name = "Hear Audios Playing", Toggle = true, Enabled = HearSelf, OnEnable = () => HearSelf = true, OnDisable = () => HearSelf = false });
+            soundCat.Buttons.Add(new Button { Name = "Only Play Audio In Mic", Toggle = true, Enabled = !HearSelf, OnEnable = () => HearSelf = false, OnDisable = () => HearSelf = true });
             soundCat.Buttons.Add(new Button { Name = "Loop Audio", Toggle = true, Enabled = LoopAudio, OnEnable = () => LoopAudio = true, OnDisable = () => LoopAudio = false });
             soundCat.Buttons.Add(new Button { Name = "Open Sound Folder", Toggle = false, OnEnable = () => RevealSoundFolder() });
             soundCat.Buttons.Add(new Button { Name = "Reload Sounds", Toggle = false, OnEnable = () => { LoadSoundboard(false); } });
             soundCat.Buttons.Add(new Button { Name = "↓ Sounds ↓", Toggle = false, Label = true });
 
             string[] supportedExts = { ".wav", ".ogg", ".mp3" };
-            string[] files = new string[0];
 
             try
             {
-                files = Directory.GetFiles(SoundsFolder, "*.*", SearchOption.AllDirectories)
+                string[] rootFiles = Directory.GetFiles(SoundsFolder, "*.*", SearchOption.TopDirectoryOnly)
                     .Where(f => supportedExts.Contains(Path.GetExtension(f).ToLower()))
                     .OrderBy(f => Path.GetFileNameWithoutExtension(f))
                     .ToArray();
+
+                foreach (string file in rootFiles)
+                {
+                    string displayName = Path.GetFileNameWithoutExtension(file).Replace("_", " ");
+                    string filePath = file;
+
+                    soundCat.Buttons.Add(new Button
+                    {
+                        Name = displayName,
+                        Toggle = true,
+                        OnceEnable = () => PlayFile(filePath),
+                        OnceDisable = () => HaltAudio()
+                    });
+                }
             }
             catch { }
 
-            foreach (string file in files)
+            try
             {
-                string displayName = Path.GetFileNameWithoutExtension(file).Replace("_", " ");
-                string filePath = file;
+                string[] subdirs = Directory.GetDirectories(SoundsFolder, "*", SearchOption.TopDirectoryOnly)
+                    .OrderBy(d => Path.GetFileName(d))
+                    .ToArray();
 
-                soundCat.Buttons.Add(new Button
+                foreach (string subdir in subdirs)
                 {
-                    Name = displayName,
-                    Toggle = true,
-                    OnceEnable = () => PlayFile(filePath),
-                    OnceDisable = () => HaltAudio()
-                });
-            }
+                    string folderName = Path.GetFileName(subdir) + " [FOLDER]";
+                    Category folderCat = new Category { Name = folderName };
 
-            _loaded = true;
+                    string[] folderFiles = Directory.GetFiles(subdir, "*.*", SearchOption.AllDirectories)
+                        .Where(f => supportedExts.Contains(Path.GetExtension(f).ToLower()))
+                        .OrderBy(f => Path.GetFileNameWithoutExtension(f))
+                        .ToArray();
+
+                    foreach (string file in folderFiles)
+                    {
+                        string displayName = Path.GetFileNameWithoutExtension(file).Replace("_", " ");
+                        string filePath = file;
+
+                        folderCat.Buttons.Add(new Button
+                        {
+                            Name = displayName,
+                            Toggle = true,
+                            OnceEnable = () => PlayFile(filePath),
+                            OnceDisable = () => HaltAudio()
+                        });
+                    }
+
+                    if (folderCat.Buttons.Count > 0)
+                    {
+                        soundCat.Subcategories.Add(folderCat);
+                    }
+                }
+            }
+            catch { }
+
+            loaded = true;
         }
 
         public static void PlayFile(string filePath)
@@ -91,7 +129,7 @@ namespace Juul
         {
             AudioClip clip = null;
 
-            if (_clipCache.TryGetValue(filePath, out AudioClip cached) && cached != null)
+            if (clipCache.TryGetValue(filePath, out AudioClip cached) && cached != null)
             {
                 clip = cached;
             }
@@ -106,7 +144,7 @@ namespace Juul
                     clip = DownloadHandlerAudioClip.GetContent(request);
                     if (clip == null) yield break;
 
-                    _clipCache[filePath] = clip;
+                    clipCache[filePath] = clip;
                 }
             }
 
@@ -151,16 +189,16 @@ namespace Juul
         private static void PlayLocal(AudioClip clip)
         {
             EnsureAudioObj();
-            _audioSource.clip = clip;
-            _audioSource.loop = LoopAudio;
-            _audioSource.volume = 1f;
-            _audioSource.Play();
+            audioSource.clip = clip;
+            audioSource.loop = LoopAudio;
+            audioSource.volume = 1f;
+            audioSource.Play();
         }
 
         public static void HaltAudio()
         {
-            if (_audioSource != null)
-                _audioSource.Stop();
+            if (audioSource != null)
+                audioSource.Stop();
 
             if (PhotonNetwork.InRoom)
             {
@@ -178,13 +216,24 @@ namespace Juul
                 catch { }
             }
 
-            Category soundCat = Buttons.GetCategory("Soundboard");
+            Category soundCat = ExtraButtons.GetCategory("Soundboard");
             if (soundCat != null)
             {
                 for (int i = 0; i < soundCat.Buttons.Count; i++)
                 {
                     if (soundCat.Buttons[i].Toggle && soundCat.Buttons[i].Enabled)
                         soundCat.Buttons[i].Enabled = false;
+                }
+                if (soundCat.Subcategories != null)
+                {
+                    foreach (var sub in soundCat.Subcategories)
+                    {
+                        for (int i = 0; i < sub.Buttons.Count; i++)
+                        {
+                            if (sub.Buttons[i].Toggle && sub.Buttons[i].Enabled)
+                                sub.Buttons[i].Enabled = false;
+                        }
+                    }
                 }
             }
 
@@ -196,8 +245,8 @@ namespace Juul
         {
             if (Buttons.Modules == null) return;
 
-            if (!_loaded)
-                PopulateSounds();
+            if (!loaded)
+                pSounds();
 
             if (!LoopAudio && IsPlaying && RecoverTimer > 0f && Time.time >= RecoverTimer)
                 HaltAudio();
@@ -205,17 +254,17 @@ namespace Juul
 
         private static void EnsureAudioObj()
         {
-            if (_audioObj == null)
+            if (audioObj == null)
             {
-                _audioObj = new GameObject("JuulSoundboard");
-                Object.DontDestroyOnLoad(_audioObj);
-                _audioSource = _audioObj.AddComponent<AudioSource>();
-                _audioSource.spatialBlend = 0f;
-                _audioSource.playOnAwake = false;
+                audioObj = new GameObject("JuulS");
+                Object.DontDestroyOnLoad(audioObj);
+                audioSource = audioObj.AddComponent<AudioSource>();
+                audioSource.spatialBlend = 0f;
+                audioSource.playOnAwake = false;
             }
-            else if (_audioSource == null)
+            else if (audioSource == null)
             {
-                _audioSource = _audioObj.GetComponent<AudioSource>() ?? _audioObj.AddComponent<AudioSource>();
+                audioSource = audioObj.GetComponent<AudioSource>() ?? audioObj.AddComponent<AudioSource>();
             }
         }
 
@@ -237,12 +286,12 @@ namespace Juul
 
         public static void LoadSoundboard(bool switchCategory = true)
         {
-            _clipCache.Clear();
-            _loaded = false;
-            PopulateSounds();
+            clipCache.Clear();
+            loaded = false;
+            pSounds();
             if (switchCategory)
             {
-                Category soundCat = Buttons.GetCategory("Soundboard");
+                Category soundCat = ExtraButtons.GetCategory("Soundboard");
                 if (soundCat != null)
                 {
                     Core.ActiveCategory = soundCat;
@@ -253,5 +302,4 @@ namespace Juul
         }
     }
 }
-
 

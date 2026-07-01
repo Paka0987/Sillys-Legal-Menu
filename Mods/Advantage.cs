@@ -1,4 +1,4 @@
-﻿using BepInEx;
+using BepInEx;
 using GorillaGameModes;
 using GorillaTagScripts;
 using Photon.Pun;
@@ -18,6 +18,30 @@ namespace Juul
 {
     internal class Advantages
     {
+        public static void TagNearest()
+        {
+            if (!PlayerIsTagged(VRRig.LocalRig))
+                return;
+            VRRig nearest = null;
+            float nearestDistance = float.MaxValue;
+            Vector3 myPos = VRRig.LocalRig.transform.position;
+            foreach (VRRig rig in VRRigCache.ActiveRigs)
+            {
+                if (rig == null || rig == VRRig.LocalRig) continue;
+                if (PlayerIsTagged(rig)) continue;
+
+                float distance = Vector3.Distance(myPos, rig.transform.position);
+                if (distance < nearestDistance)
+                {
+                    nearestDistance = distance;
+                    nearest = rig;
+                }
+            }
+            if (nearest != null)
+            {
+                TagPlayer(Rigs.GetPlayerFromVRRig1(nearest));
+            }
+        }
         public static void TagPlayer(Photon.Realtime.Player Target)
         {
             if (!PlayerIsTagged(VRRig.LocalRig) || PlayerIsTagged(Rigs.GetVRRigFromNetPlayer(Target)))
@@ -44,7 +68,7 @@ namespace Juul
         {
             if (!PlayerIsTagged(VRRig.LocalRig))
             {
-                Buttons.GetCategory("Advantage").GetButton("Tag All").SetEnabled(false);
+                ExtraButtons.GetCategory("Advantage").GetButton("Tag All").SetEnabled(false);
                 return;
             }
 
@@ -53,7 +77,7 @@ namespace Juul
 
             if (rigs.Length <= 0)
             {
-                Buttons.GetCategory("Advantage").GetButton("Tag All").SetEnabled(false);
+                ExtraButtons.GetCategory("Advantage").GetButton("Tag All").SetEnabled(false);
                 return;
             }
 
@@ -68,28 +92,33 @@ namespace Juul
             Serialize(GorillaTagger.Instance.myVRRig.GetView, new RaiseEventOptions { TargetActors = new[] { PhotonNetwork.MasterClient.ActorNumber } });
         }
 
+        public static void FixRig()
+        {
+            var tagger = GorillaTagger.Instance;
+            if (tagger != null && tagger.offlineVRRig != null)
+            {
+                tagger.offlineVRRig.enabled = true;
+            }
+        }
+
         public static void TagSelf()
         {
-            if (GorillaTagger.Instance == null) return;
+            var tagger = GorillaTagger.Instance;
+            if (tagger == null) return;
 
-            if (!PlayerIsTagged(VRRig.LocalRig))
+            if (PlayerIsTagged(VRRig.LocalRig))
             {
-                foreach (VRRig vrrig in VRRigCache.ActiveRigs)
-                {
-                    if (PlayerIsTagged(vrrig))
-                    {
-                        GorillaTagger.Instance.offlineVRRig.enabled = false;
-                        GorillaTagger.Instance.offlineVRRig.transform.position = vrrig.rightHandTransform.position;
-                        GorillaTagger.Instance.myVRRig.transform.position = vrrig.rightHandTransform.position;
-                        break;
-                    }
-                }
+                tagger.offlineVRRig.enabled = true;
+                return;
             }
-            else
-            {
-                GorillaTagger.Instance.offlineVRRig.enabled = true;
-                Buttons.GetCategory("Advantage").GetButton("Tag Self").SetEnabled(false);
-            }
+
+            VRRig infectedPlayer = VRRigCache.ActiveRigs.FirstOrDefault(r => r != null && r != VRRig.LocalRig && PlayerIsTagged(r));
+            
+            if (infectedPlayer == null) return;
+
+            tagger.offlineVRRig.enabled = false;
+            tagger.offlineVRRig.transform.position = infectedPlayer.rightHandTransform.position;
+            Serialize(tagger.myVRRig.GetView, new RaiseEventOptions { Receivers = ReceiverGroup.Others });
         }
 
         public static void TagArua()
@@ -108,6 +137,32 @@ namespace Juul
                             }
                         }
                     }
+                }
+                catch (Exception e)
+                {
+                    Debug.Log(e);
+                }
+            }
+        }
+        public static void GripTagArua()
+        {
+            if (PhotonNetwork.InRoom)
+            {
+                try
+                {
+                    if (Inputs.RightGrip)
+                    {
+                        foreach (VRRig rig in VRRigCache.ActiveRigs)
+                        {
+                            if (rig != GorillaTagger.Instance.offlineVRRig)
+                            {
+                                if (Vector3.Distance(GorillaTagger.Instance.rightHandTransform.transform.position, rig.transform.position) < 6 || Vector3.Distance(GorillaTagger.Instance.leftHandTransform.transform.position, rig.transform.position) < 6)
+                                {
+                                    GameMode.ReportTag(rig.OwningNetPlayer);
+                                }
+                            }
+                        }
+                    }    
                 }
                 catch (Exception e)
                 {
@@ -137,5 +192,8 @@ namespace Juul
             PlayerPrefs.SetString("didTutorial", "done");
             PlayerPrefs.Save();
         }
+
+
     }
 }
+

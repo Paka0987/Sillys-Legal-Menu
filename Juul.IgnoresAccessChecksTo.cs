@@ -1,4 +1,4 @@
-﻿#pragma warning disable CS0436
+#pragma warning disable CS0436
 
 [assembly: System.Runtime.CompilerServices.IgnoresAccessChecksToAttribute("0Harmony")]
 [assembly: System.Runtime.CompilerServices.IgnoresAccessChecksToAttribute("AA.Mothership")]
@@ -257,3 +257,4 @@
 [assembly: System.Runtime.CompilerServices.IgnoresAccessChecksToAttribute("VYaml.Core")]
 [assembly: System.Runtime.CompilerServices.IgnoresAccessChecksToAttribute("websocket-sharp")]
 [assembly: System.Runtime.CompilerServices.IgnoresAccessChecksToAttribute("ZString")]
+

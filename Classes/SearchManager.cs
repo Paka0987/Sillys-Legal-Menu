@@ -15,13 +15,13 @@ namespace Juul
             searchCat.Name = "Search Results";
             searchCat.Buttons = new List<Button>();
             searchCat.Subcategories = new List<Category>();
-            
+
             string query = SearchQuery.ToLower();
             if (!string.IsNullOrEmpty(query) && Buttons.Modules != null)
             {
                 foreach (Category module in Buttons.Modules)
                 {
-                    if (module == Buttons.EnabledCategory) continue;
+                    if (module == ExtraButtons.EnabledCategory) continue;
                     if (module == PlayerMenu.GetPlayersCategory()) continue;
                     if (module.Buttons != null)
                     {

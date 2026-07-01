@@ -1,10 +1,13 @@
-﻿using BepInEx;
+using BepInEx;
+using com.AnotherAxiom.Paddleball;
 using ExitGames.Client.Photon;
 using GorillaExtensions;
 using GorillaGameModes;
 using GorillaLocomotion;
 using GorillaNetworking;
+using GorillaTag.Gravity;
 using GorillaTagScripts;
+using Liv.Lck.GorillaTag;
 using Photon;
 using Photon.Pun;
 using Photon.Realtime;
@@ -16,7 +19,9 @@ using System.Linq;
 using System.Reflection;
 using System.Threading;
 using UnityEngine;
+using UnityEngine.Events;
 using UnityEngine.XR;
+using static GorillaNetworking.CosmeticsController;
 using Hashtable = ExitGames.Client.Photon.Hashtable;
 using JoinType = GorillaNetworking.JoinType;
 
@@ -44,8 +49,8 @@ namespace Juul
             PhotonNetwork.QuickResends = int.MaxValue;
             PhotonNetwork.SendAllOutgoingCommands();
             PhotonNetwork.NetworkingClient.OpRaiseEvent(200, rpcFilterByViewId, raiseEventOptions, SendOptions.SendReliable);
-        } 
-       
+        }
+
         public static void DropHoverBoard(Vector3 pos, Quaternion rot, Vector3 vel)
         {
             if (PhotonNetwork.IsConnected)
@@ -55,24 +60,100 @@ namespace Juul
             }
         }
         public static float delay;
-        public static void ShootHoverBoards()
+        public static void HoverboardSpammer()
         {
             if (ControllerInputPoller.instance.rightGrab)
             {
                 if (Time.time > delay)
                 {
-                    delay = Time.time + 0.1f;
-                    DropHoverBoard(GorillaTagger.Instance.rightHandTransform.transform.position, Quaternion.identity, GorillaTagger.Instance.rightHandTransform.transform.forward * 12);
+                    delay = Time.time + 0.5f;
+                    DropHoverBoard(GorillaTagger.Instance.rightHandTransform.transform.position, Quaternion.identity, GorillaTagger.Instance.rightHandTransform.transform.up * 1f);
                 }
             }
             if (ControllerInputPoller.instance.leftGrab)
             {
                 if (Time.time > delay)
                 {
-                    delay = Time.time + 0.1f;
-                    DropHoverBoard(GorillaTagger.Instance.leftHandTransform.transform.position, Quaternion.identity, GorillaTagger.Instance.leftHandTransform.transform.forward * 12);
+                    delay = Time.time + 0.5f;
+                    DropHoverBoard(GorillaTagger.Instance.leftHandTransform.transform.position, Quaternion.identity, GorillaTagger.Instance.leftHandTransform.transform.up * 1f);
                 }
             }
+        }
+        public static void HoverboardMinigun()
+        {
+            if (ControllerInputPoller.instance.rightGrab)
+            {
+                if (Time.time > delay)
+                {
+                    delay = Time.time + 0.5f;
+                    DropHoverBoard(GorillaTagger.Instance.rightHandTransform.transform.position, Quaternion.identity, GorillaTagger.Instance.rightHandTransform.transform.forward * 10f);
+                }
+            }
+            if (ControllerInputPoller.instance.leftGrab)
+            {
+                if (Time.time > delay)
+                {
+                    delay = Time.time + 0.5f;
+                    DropHoverBoard(GorillaTagger.Instance.leftHandTransform.transform.position, Quaternion.identity, GorillaTagger.Instance.leftHandTransform.transform.forward * 10f);
+                }
+            }
+        }
+        public static void HoverboardSniper()
+        {
+            if (ControllerInputPoller.instance.rightGrab)
+            {
+                if (Time.time > delay)
+                {
+                    delay = Time.time + 0.5f;
+                    DropHoverBoard(GorillaTagger.Instance.rightHandTransform.transform.position, Quaternion.identity, GorillaTagger.Instance.rightHandTransform.transform.forward * 50f);
+                }
+            }
+            if (ControllerInputPoller.instance.leftGrab)
+            {
+                if (Time.time > delay)
+                {
+                    delay = Time.time + 0.5f;
+                    DropHoverBoard(GorillaTagger.Instance.leftHandTransform.transform.position, Quaternion.identity, GorillaTagger.Instance.leftHandTransform.transform.forward * 50f);
+                }
+            }
+        }
+        public static void HoverboardSniper2()
+        {
+            if (ControllerInputPoller.instance.rightGrab)
+            {
+                if (Time.time > delay)
+                {
+                    delay = Time.time + 0.5f;
+                    DropHoverBoard(GorillaTagger.Instance.rightHandTransform.transform.position, Quaternion.identity, GorillaTagger.Instance.rightHandTransform.transform.forward * 100f);
+                }
+            }
+            if (ControllerInputPoller.instance.leftGrab)
+            {
+                if (Time.time > delay)
+                {
+                    delay = Time.time + 0.5f;
+                    DropHoverBoard(GorillaTagger.Instance.leftHandTransform.transform.position, Quaternion.identity, GorillaTagger.Instance.leftHandTransform.transform.forward * 100f);
+                }
+            }
+        }
+        public static void HoverboardGun()
+        {
+            GunLib.StartPointerSystem(() =>
+            {
+                if (GunLib.spherepointer != null && Time.time > delay)
+                {
+                    delay = Time.time + 0.5f;
+                    if (PhotonNetwork.IsConnected && FreeHoverboardManager.instance != null)
+                    {
+                        FreeHoverboardManager.instance.SendDropBoardRPC(
+                            GunLib.spherepointer.transform.position,
+                            Quaternion.identity,
+                            Vector3.zero,
+                            Vector3.zero,
+                            Color.clear);
+                    }
+                }
+            }, false);
         }
         public static void PlayRandomSounds()
         {
@@ -154,10 +235,10 @@ namespace Juul
                 term.foldupDelay = float.MaxValue;
             }
         }
-       
+
         public static void SoundSpammer(int num)
         {
-            if (ControllerInputPoller.instance.rightGrab || ControllerInputPoller.instance.leftGrab)
+            if (Inputs.RightGrip || Inputs.LeftGrip)
             {
                 if (Time.time > delay)
                 {
@@ -174,8 +255,23 @@ namespace Juul
             }
             FlushRPCS();
         }
+        public static void SqueakSoundSpam2() => SoundSpammer(187);
+        public static void SqueakSoundSpam3() => SoundSpammer(222);
+        public static void SqueakSoundSpam4() => SoundSpammer(275);
+        public static void StaticSoundSpam() => SoundSpammer(64);
+        public static void StaticSoundSpam2() => SoundSpammer(72);
+        public static void StaticSoundSpam3() => SoundSpammer(196);
+        public static void StaticSoundSpam4() => SoundSpammer(210);
+        public static void StaticSoundSpam5() => SoundSpammer(259);
+        public static void WoodSoundSpam() => SoundSpammer(7);
+        public static void WoodSoundSpam2() => SoundSpammer(101);
+        public static void WoodSoundSpam3() => SoundSpammer(112);
+        public static void WoodSoundSpam4() => SoundSpammer(1);
         public static void BassSoundSpam() => SoundSpammer(68);
         public static void MetalSoundSpam() => SoundSpammer(18);
+        public static void MetalSoundSpam2() => SoundSpammer(98);
+        public static void MetalSoundSpam3() => SoundSpammer(57);
+        public static void PopSoundSpam() => SoundSpammer(84);
         public static void WolfSoundSpam() => SoundSpammer(195);
         public static void CatSoundSpam() => SoundSpammer(236);
         public static void TurkeySoundSpam() => SoundSpammer(83);
@@ -184,13 +280,17 @@ namespace Juul
         public static void SqueakSoundSpam() => SoundSpammer(215);
         public static void EarrapeSoundSpam() => SoundSpammer(215);
         public static void DingSoundSpam() => SoundSpammer(244);
+        public static void DingSoundSpam2() => SoundSpammer(269);
         public static void BigCrystalSoundSpam() => SoundSpammer(213);
+        public static void CrystalSoundSpam() => SoundSpammer(20);
         public static void PanSoundSpam() => SoundSpammer(248);
         public static void AK47SoundSpam() => SoundSpammer(203);
         public static void TickSoundSpam() => SoundSpammer(148);
+        public static void CarpetSoundSpam() => SoundSpammer(93);
+        public static void ScarySoundSpam() => SoundSpammer(283);
         public static void PianoSoundSpam()
         {
-            if (ControllerInputPoller.instance.rightGrab || ControllerInputPoller.instance.leftGrab)
+            if (Inputs.RightGrip || Inputs.LeftGrip)
             {
                 if (Time.time > delay)
                 {
@@ -208,10 +308,45 @@ namespace Juul
             }
             FlushRPCS();
         }
-
+        public static void WideFOV()
+        {
+            Camera.main.fieldOfView = 130f;
+        }
+        public static void NormalFOV()
+        {
+            Camera.main.fieldOfView = 90f;
+        }
+        public static void LookFOV()
+        {
+            Camera.main.fieldOfView = 1f;
+        }
+        private static bool isShaking = false;
+        public static void SeizureCamera()
+        {
+            if (ControllerInputPoller.instance.rightControllerIndexFloat > 0.1f && !isShaking)
+            {
+                GorillaTagger.Instance.StartCoroutine(CameraShake());
+            }
+        }
+        private static IEnumerator CameraShake()
+        {
+            isShaking = true;
+            Vector3 originalPos = Camera.main.transform.position;
+            for (int i = 0; i < 10; i++)
+            {
+                Camera.main.transform.position = originalPos + new Vector3(
+                    UnityEngine.Random.Range(-0.2f, 0.2f),
+                    UnityEngine.Random.Range(-0.1f, 0.1f),
+                    0
+                );
+                yield return new WaitForSeconds(0.02f);
+            }
+            Camera.main.transform.position = originalPos;
+            isShaking = false;
+        }
         public static void RandomSoundSpam()
         {
-            if (ControllerInputPoller.instance.rightGrab || ControllerInputPoller.instance.leftGrab)
+            if (Inputs.RightGrip || Inputs.LeftGrip)
             {
                 if (Time.time > delay)
                 {
@@ -230,32 +365,10 @@ namespace Juul
             FlushRPCS();
         }
 
-        public static void CrystalSoundSpam()
-        {
-            int[] crystalSounds = new int[] { 213, 214, 215, 216, 217 };
-            if (ControllerInputPoller.instance.rightGrab || ControllerInputPoller.instance.leftGrab)
-            {
-                if (Time.time > delay)
-                {
-                    delay = Time.time + 0.15f;
-                    int crystalSound = crystalSounds[UnityEngine.Random.Range(0, crystalSounds.Length)];
-                    if (PhotonNetwork.InRoom)
-                    {
-                        GorillaTagger.Instance.myVRRig.SendRPC("RPC_PlayHandTap", RpcTarget.All, crystalSound, false, 999999f);
-                    }
-                    else
-                    {
-                        GorillaTagger.Instance.offlineVRRig.PlayHandTapLocal(crystalSound, false, 999999f);
-                    }
-                }
-            }
-            FlushRPCS();
-        }
-
         public static void SirenSoundSpam()
         {
             int[] sirenSounds = new int[] { 250, 251, 252, 253 };
-            if (ControllerInputPoller.instance.rightGrab || ControllerInputPoller.instance.leftGrab)
+            if (Inputs.RightGrip || Inputs.LeftGrip)
             {
                 if (Time.time > delay)
                 {
@@ -305,6 +418,7 @@ namespace Juul
                 GorillaTagger.Instance.myVRRig.SendRPC("RPC_InitializeNoobMaterial", RpcTarget.All, c.r, c.g, c.b);
             }
         }
+
         public static void FadeMonkeyHardRGB()
         {
             float t = Time.time * 0.5f;
@@ -330,15 +444,7 @@ namespace Juul
                 GorillaTagger.Instance.myVRRig.SendRPC("RPC_InitializeNoobMaterial", RpcTarget.All, val, val, val);
             }
         }
-        public static void UnlockSubscription()
-        {
-            SubscriptionManager.SetSubscriptionSettingValue(
-                SubscriptionManager.SubscriptionFeatures.IOBT, 1);
-            SubscriptionManager.SetSubscriptionSettingValue(
-                SubscriptionManager.SubscriptionFeatures.HandTracking, 1);
-            SubscriptionManager.SetSubscriptionSettingValue(
-                SubscriptionManager.SubscriptionFeatures.GoldenName, 1);
-        }
+
         public static void ForgetAllCredentials()
         {
             PlayFabSettings.staticPlayer.ForgetAllCredentials();
@@ -551,6 +657,520 @@ namespace Juul
             camera.m_CameraVisuals.SetRecordingState(false);
             camera.transform.position = new Vector3(999f, 999f, 999f);
         }*/
+
+        private static SocialCoconutCamera coconutCamera;
+        private static float cameraDelay = 0f;
+
+        private static void FindCoconutCamera()
+        {
+            if (coconutCamera == null)
+            {
+                coconutCamera = GameObject.FindObjectOfType<SocialCoconutCamera>();
+            }
+        }
+
+        public static void GrabCamera()
+        {
+            FindCoconutCamera();
+            if (coconutCamera == null) return;
+
+            if (Inputs.RightGrip)
+            {
+                coconutCamera.SetVisualsActive(true);
+                coconutCamera.SetRecordingState(true);
+                coconutCamera.transform.position = GorillaTagger.Instance.rightHandTransform.position;
+                coconutCamera.transform.rotation = GorillaTagger.Instance.rightHandTransform.rotation;
+                coconutCamera.transform.SetParent(GorillaTagger.Instance.rightHandTransform);
+            }
+            if (Inputs.LeftGrip)
+            {
+                coconutCamera.SetVisualsActive(true);
+                coconutCamera.SetRecordingState(true);
+                coconutCamera.transform.position = GorillaTagger.Instance.leftHandTransform.position;
+                coconutCamera.transform.rotation = GorillaTagger.Instance.leftHandTransform.rotation;
+                coconutCamera.transform.SetParent(GorillaTagger.Instance.leftHandTransform);
+            }
+        }
+
+        public static void OrbitCamera()
+        {
+            FindCoconutCamera();
+            if (coconutCamera == null) return;
+
+            coconutCamera.SetVisualsActive(true);
+            coconutCamera.SetRecordingState(true);
+            float angle = Time.time * 10f;
+            Vector3 orbitPos = GTPlayer.Instance.transform.position +
+                new Vector3(Mathf.Cos(angle) * 2f, 1f, Mathf.Sin(angle) * 2f);
+            coconutCamera.transform.position = orbitPos;
+            coconutCamera.transform.LookAt(GTPlayer.Instance.transform.position);
+        }
+
+        public static void SpazCamera()
+        {
+            FindCoconutCamera();
+            if (coconutCamera == null) return;
+
+            coconutCamera.SetVisualsActive(true);
+            coconutCamera.SetRecordingState(true);
+            Vector3 spazPos = GTPlayer.Instance.transform.position + Vector3.up +
+                new Vector3(
+                    Mathf.Sin(Time.time * 30f) * 2f,
+                    Mathf.Cos(Time.time * 40f) * 1.5f,
+                    Mathf.Sin(Time.time * 25f) * 2f
+                );
+            coconutCamera.transform.position = spazPos;
+            coconutCamera.transform.rotation = Quaternion.Euler(
+                Mathf.Sin(Time.time * 20f) * 360f,
+                Mathf.Cos(Time.time * 15f) * 360f,
+                Mathf.Sin(Time.time * 10f) * 360f
+            );
+        }
+
+        public static void DestroyCamera()
+        {
+            FindCoconutCamera();
+            if (coconutCamera == null) return;
+
+            coconutCamera.SetVisualsActive(false);
+            coconutCamera.SetRecordingState(false);
+            coconutCamera.transform.position = new Vector3(999f, 999f, 999f);
+            coconutCamera.transform.SetParent(null);
+        }
+        public static void FlashCameraRecording()
+        {
+            FindCoconutCamera();
+            if (coconutCamera == null) return;
+
+            if (Time.time > cameraDelay)
+            {
+                cameraDelay = Time.time + 0.5f;
+                var isRecordingField = typeof(SocialCoconutCamera).GetField("_isActive",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+
+                if (isRecordingField != null)
+                {
+                    bool current = (bool)isRecordingField.GetValue(coconutCamera);
+                    coconutCamera.SetRecordingState(!current);
+                    coconutCamera.SetVisualsActive(true);
+                }
+            }
+        }
+
+        public static void GrabTablet()
+        {
+            if (Inputs.RightGrip)
+            {
+                LckSocialCamera camera = LckSocialCameraManager.Instance._networkedTablet;
+                if (camera != null)
+                {
+                    camera.visible = true;
+                    camera.recording = true;
+                    camera.m_CameraVisuals.SetNetworkedVisualsActive(true);
+                    camera.m_CameraVisuals.SetRecordingState(true);
+                    camera.transform.position = GorillaTagger.Instance.rightHandTransform.position;
+                    camera.transform.rotation = GorillaTagger.Instance.rightHandTransform.rotation;
+                    camera.transform.SetParent(GorillaTagger.Instance.rightHandTransform);
+                }
+            }
+            if (Inputs.LeftGrip)
+            {
+                LckSocialCamera camera = LckSocialCameraManager.Instance._networkedTablet;
+                if (camera != null)
+                {
+                    camera.visible = true;
+                    camera.recording = true;
+                    camera.m_CameraVisuals.SetNetworkedVisualsActive(true);
+                    camera.m_CameraVisuals.SetRecordingState(true);
+                    camera.transform.position = GorillaTagger.Instance.leftHandTransform.position;
+                    camera.transform.rotation = GorillaTagger.Instance.leftHandTransform.rotation;
+                    camera.transform.SetParent(GorillaTagger.Instance.leftHandTransform);
+                }
+            }
+        }
+        public static void OrbitTablet()
+        {
+            LckSocialCamera tablet = LckSocialCameraManager.Instance._networkedTablet;
+            if (tablet != null)
+            {
+                tablet.visible = true;
+                tablet.recording = true;
+                tablet.m_CameraVisuals.SetNetworkedVisualsActive(true);
+                tablet.m_CameraVisuals.SetRecordingState(true);
+                float angle = Time.time * 10f;
+                Vector3 orbitPos = GTPlayer.Instance.transform.position +
+                new Vector3(Mathf.Cos(angle) * 2f, 1f, Mathf.Sin(angle) * 2f);
+                tablet.transform.position = orbitPos;
+                tablet.transform.LookAt(GTPlayer.Instance.transform.position);
+            }
+        }
+
+        public static void SpazTablet()
+        {
+            LckSocialCamera tablet = LckSocialCameraManager.Instance._networkedTablet;
+            if (tablet != null)
+            {
+                tablet.visible = true;
+                tablet.recording = true;
+                tablet.m_CameraVisuals.SetNetworkedVisualsActive(true);
+                tablet.m_CameraVisuals.SetRecordingState(true);
+                Vector3 spazPos = GTPlayer.Instance.transform.position + Vector3.up +
+                new Vector3(
+                    Mathf.Sin(Time.time * 30f) * 2f,
+                    Mathf.Cos(Time.time * 40f) * 1.5f,
+                    Mathf.Sin(Time.time * 25f) * 2f
+                );
+                tablet.transform.position = spazPos;
+                tablet.transform.rotation = Quaternion.Euler(
+                    Mathf.Sin(Time.time * 20f) * 360f,
+                    Mathf.Cos(Time.time * 15f) * 360f,
+                    Mathf.Sin(Time.time * 10f) * 360f
+                );
+            }
+        }
+
+        public static void DestroyTablet()
+        {
+            LckSocialCamera tablet = LckSocialCameraManager.Instance._networkedTablet;
+            if (tablet != null)
+            {
+                tablet.visible = false;
+                tablet.recording = false;
+                tablet.m_CameraVisuals.SetNetworkedVisualsActive(false);
+                tablet.m_CameraVisuals.SetRecordingState(false);
+                tablet.transform.position = new Vector3(999f, 999f, 999f);
+                tablet.transform.SetParent(null);
+            }
+        }
+        private static List<GliderHoldable> cachedGliders = new List<GliderHoldable>();
+        private static List<BalloonHoldable> cachedBalloons = new List<BalloonHoldable>();
+        private static float lastGliderRefresh = 0f;
+        private static float lastBalloonRefresh = 0f;
+        private static float lastOrbitTime = 0f;
+        private static float lastSpazTime = 0f;
+
+        private static void RefreshGliders()
+        {
+            if (Time.time - lastGliderRefresh > 1f)
+            {
+                cachedGliders.Clear();
+                cachedGliders.AddRange(Resources.FindObjectsOfTypeAll<GliderHoldable>());
+                lastGliderRefresh = Time.time;
+            }
+        }
+
+        private static void RefreshBalloons()
+        {
+            if (Time.time - lastBalloonRefresh > 1f)
+            {
+                cachedBalloons.Clear();
+                cachedBalloons.AddRange(Resources.FindObjectsOfTypeAll<BalloonHoldable>());
+                lastBalloonRefresh = Time.time;
+            }
+        }
+
+        public static List<GliderHoldable> GetAllGliders()
+        {
+            RefreshGliders();
+            return cachedGliders;
+        }
+
+        public static List<BalloonHoldable> GetAllBalloons()
+        {
+            RefreshBalloons();
+            return cachedBalloons;
+        }
+
+        public static void GrabGlider()
+        {
+            if (!Inputs.RightGrip && !Inputs.LeftGrip) return;
+
+            RefreshGliders();
+            bool isRightGrip = Inputs.RightGrip;
+            Transform handTransform = isRightGrip ?
+                GorillaTagger.Instance.rightHandTransform :
+                GorillaTagger.Instance.leftHandTransform;
+
+            foreach (GliderHoldable glider in cachedGliders)
+            {
+                if (glider == null) continue;
+
+                if (glider.IsMine)
+                {
+                    glider.transform.position = handTransform.position;
+                    glider.transform.rotation = handTransform.rotation;
+
+                    if (glider.transform.parent != handTransform)
+                    {
+                        glider.transform.SetParent(handTransform);
+                    }
+                }
+                else if (NetworkSystem.Instance.InRoom)
+                {
+                    glider.OnHover(null, null);
+                }
+            }
+        }
+
+        private static float orbitAngle = 0f;
+        public static void OrbitGlider()
+        {
+            if (Time.time - lastOrbitTime < 0.033f) return; 
+            lastOrbitTime = Time.time;
+
+            RefreshGliders();
+            if (GTPlayer.Instance == null) return;
+
+            orbitAngle += Time.deltaTime * 8f; 
+            Vector3 playerPos = GTPlayer.Instance.transform.position;
+
+            foreach (GliderHoldable glider in cachedGliders)
+            {
+                if (glider?.IsMine != true) continue;
+
+                float cos = Mathf.Cos(orbitAngle);
+                float sin = Mathf.Sin(orbitAngle);
+
+                Vector3 orbitPos = playerPos + new Vector3(cos * 2f, 1f, sin * 2f);
+                glider.transform.position = orbitPos;
+                glider.transform.LookAt(playerPos);
+            }
+        }
+
+        private static float spazSeedX, spazSeedY, spazSeedZ, spazRotX, spazRotY, spazRotZ;
+        private static bool spazInitialized = false;
+
+        public static void SpazGlider()
+        {
+            if (Time.time - lastSpazTime < 0.033f) return;
+            lastSpazTime = Time.time;
+
+            RefreshGliders();
+            if (GTPlayer.Instance == null) return;
+
+            if (!spazInitialized)
+            {
+                spazSeedX = UnityEngine.Random.Range(10f, 50f);
+                spazSeedY = UnityEngine.Random.Range(10f, 50f);
+                spazSeedZ = UnityEngine.Random.Range(10f, 50f);
+                spazRotX = UnityEngine.Random.Range(10f, 30f);
+                spazRotY = UnityEngine.Random.Range(10f, 30f);
+                spazRotZ = UnityEngine.Random.Range(10f, 30f);
+                spazInitialized = true;
+            }
+
+            Vector3 playerPos = GTPlayer.Instance.transform.position;
+            float time = Time.time;
+
+            foreach (GliderHoldable glider in cachedGliders)
+            {
+                if (glider?.IsMine != true) continue;
+
+                Vector3 spazPos = playerPos + Vector3.up + new Vector3(
+                    Mathf.Sin(time * spazSeedX) * 2f,
+                    Mathf.Cos(time * spazSeedY) * 1.5f,
+                    Mathf.Sin(time * spazSeedZ) * 2f
+                );
+
+                glider.transform.position = spazPos;
+                glider.transform.rotation = Quaternion.Euler(
+                    Mathf.Sin(time * spazRotX) * 360f,
+                    Mathf.Cos(time * spazRotY) * 360f,
+                    Mathf.Sin(time * spazRotZ) * 360f
+                );
+            }
+        }
+
+        public static void DestroyGlider()
+        {
+            RefreshGliders();
+            Vector3 voidPos = new Vector3(999f, 999f, 999f);
+
+            foreach (GliderHoldable glider in cachedGliders)
+            {
+                if (glider?.IsMine == true)
+                {
+                    glider.transform.position = voidPos;
+                    glider.Respawn();
+                }
+            }
+        }
+
+        public static void GrabBalloons()
+        {
+            if (!Inputs.RightGrip && !Inputs.LeftGrip) return;
+
+            RefreshBalloons();
+            bool isRightGrip = Inputs.RightGrip;
+            Transform handTransform = isRightGrip ?
+                GorillaTagger.Instance.rightHandTransform :
+                GorillaTagger.Instance.leftHandTransform;
+
+            foreach (BalloonHoldable balloon in cachedBalloons)
+            {
+                if (balloon == null) continue;
+
+                if (balloon.ownerRig.isLocal)
+                {
+                    balloon.gameObject.transform.position = handTransform.position;
+                    balloon.gameObject.transform.rotation = handTransform.rotation;
+
+                    if (balloon.gameObject.transform.parent != handTransform)
+                    {
+                        balloon.gameObject.transform.SetParent(handTransform);
+                    }
+                }
+                else
+                {
+                    balloon.WorldShareableRequestOwnership();
+                }
+            }
+        }
+
+        private static float balloonOrbitAngle = 0f;
+        public static void OrbitBalloons()
+        {
+            if (Time.time - lastOrbitTime < 0.033f) return;
+
+            RefreshBalloons();
+            if (GTPlayer.Instance == null) return;
+
+            balloonOrbitAngle += Time.deltaTime * 4f;
+            Vector3 playerPos = GTPlayer.Instance.transform.position;
+
+            foreach (BalloonHoldable balloon in cachedBalloons)
+            {
+                if (balloon?.ownerRig.isLocal != true) continue;
+
+                float cos = Mathf.Cos(balloonOrbitAngle);
+                float sin = Mathf.Sin(balloonOrbitAngle);
+
+                Vector3 orbitPos = playerPos + new Vector3(
+                    cos * 2f,
+                    Mathf.Sin(balloonOrbitAngle * 1.5f) * 1.5f + 1.5f,
+                    sin * 2f
+                );
+
+                balloon.transform.position = orbitPos;
+                balloon.transform.LookAt(playerPos);
+            }
+        }
+
+        public static void SpazBalloons()
+        {
+            if (Time.time - lastSpazTime < 0.033f) return;
+
+            RefreshBalloons();
+            if (GTPlayer.Instance == null) return;
+
+            float time = Time.time;
+            Vector3 playerPos = GTPlayer.Instance.transform.position;
+
+            foreach (BalloonHoldable balloon in cachedBalloons)
+            {
+                if (balloon?.ownerRig.isLocal != true) continue;
+
+                Vector3 spazPos = playerPos + Vector3.up + new Vector3(
+                    Mathf.Sin(time * 25f) * 1.5f,
+                    Mathf.Cos(time * 30f) * 1.5f,
+                    Mathf.Sin(time * 20f) * 1.5f
+                );
+
+                balloon.transform.position = spazPos;
+                balloon.transform.rotation = Quaternion.Euler(
+                    time * 200f,
+                    time * 250f,
+                    time * 150f
+                );
+            }
+        }
+
+        public static void DestroyBalloons()
+        {
+            RefreshBalloons();
+            Vector3 voidPos = new Vector3(999f, 999f, 999f);
+
+            foreach (BalloonHoldable balloon in cachedBalloons)
+            {
+                if (balloon?.ownerRig.isLocal == true)
+                {
+                    balloon.transform.position = voidPos;
+                    balloon.WorldShareableRequestOwnership();
+                }
+            }
+        }
+
+        public static void PopAllBalloons()
+        {
+            RefreshBalloons();
+
+            foreach (BalloonHoldable balloon in cachedBalloons)
+            {
+                if (balloon != null)
+                {
+                    if (balloon.ownerRig.isLocal)
+                    {
+                        balloon.PopBalloon();
+                    }
+                    else
+                    {
+                        balloon.PopBalloonRemote();
+                    }
+                }
+            }
+        }
+
+        public static void EnableGoldNameTag()
+        {
+            VRRig.LocalRig.ShowGoldNameTag = true;
+            VRRig.LocalRig.playerText1.color = SubscriptionManager.SUBSCRIBER_NAME_COLOR;
+        }
+
+        public static void DisableGoldNameTag()
+        {
+            VRRig.LocalRig.ShowGoldNameTag = false;
+        }
+
+        public static float flashTimer = 0f;
+
+        public static void FlashGoldNameTag()
+        {
+            if (Time.time > flashTimer)
+            {
+                flashTimer = Time.time + 0.1f;
+
+                if (VRRig.LocalRig.ShowGoldNameTag)
+                {
+                    VRRig.LocalRig.ShowGoldNameTag = false;
+                    VRRig.LocalRig.playerText1.color = Color.white;
+                }
+                else
+                {
+                    VRRig.LocalRig.ShowGoldNameTag = true;
+                    VRRig.LocalRig.playerText1.color = SubscriptionManager.SUBSCRIBER_NAME_COLOR;
+                }
+            }
+        }
+
+        public static void BypassNameChange(string newName)
+        {
+            var computer = GorillaComputer.instance;
+            computer.currentName = newName;
+            computer.savedName = newName;
+            NetworkSystem.Instance.SetMyNickName(newName);
+            PlayerPrefs.SetString("playerName", newName);
+            PlayerPrefs.Save();
+            VRRig.LocalRig.SetNameTagText(newName);
+            if (NetworkSystem.Instance.InRoom)
+            {
+                GorillaTagger.Instance.myVRRig.SendRPC("RPC_InitializeNoobMaterial", RpcTarget.All,
+                    computer.redValue, computer.greenValue, computer.blueValue);
+            }
+        }
+
+
+
+
         public static void ChangeNameTo(string newName)
         {
             var computer = GorillaComputer.instance;
@@ -690,7 +1310,7 @@ namespace Juul
         }
         private static List<TransferrableObject> cachedHoldables = new List<TransferrableObject>();
         private static float lastCacheTime = 0f;
-        private static float cacheInterval = 0.5f; 
+        private static float cacheInterval = 0.5f;
 
         private static void RefreshHoldablesCache()
         {
@@ -720,6 +1340,7 @@ namespace Juul
                     {
                         if (holdable == null || holdable.gameObject == null || !holdable.gameObject.activeInHierarchy)
                             continue;
+
                         if (holdable.currentState == TransferrableObject.PositionState.InLeftHand ||
                             holdable.currentState == TransferrableObject.PositionState.InRightHand)
                         {
@@ -729,6 +1350,31 @@ namespace Juul
 
                             holdable.transform.position = handTransform.position;
                             holdable.transform.rotation = handTransform.rotation;
+
+                            if (holdable.grabAnchor != null)
+                            {
+                                holdable.grabAnchor.position = handTransform.position;
+                                holdable.grabAnchor.rotation = handTransform.rotation;
+                            }
+
+                            holdable.interpState = TransferrableObject.InterpolateState.None;
+
+                            if (holdable.rigidbodyInstance != null)
+                            {
+                                holdable.rigidbodyInstance.isKinematic = true;
+                                holdable.rigidbodyInstance.linearVelocity = Vector3.zero;
+                                holdable.rigidbodyInstance.angularVelocity = Vector3.zero;
+                            }
+
+                            if (holdable.anchor != null)
+                            {
+                                holdable.anchor.parent = null;
+                            }
+
+                            if (holdable.targetDockPositions != null)
+                            {
+                                holdable.startInterpolation = false;
+                            }
                         }
                     }
                     catch { }
@@ -806,10 +1452,10 @@ namespace Juul
                             }
                         }
                     }
-                    catch {}
+                    catch { }
                 }
             }
-            catch {}
+            catch { }
         }
         public static VirtualStumpSerializer GetTerminalNetwork()
         {
@@ -841,5 +1487,535 @@ namespace Juul
             }
         }
 
+        private static Paddleball GetPaddleball()
+        {
+            return UnityEngine.Object.FindObjectOfType<Paddleball>();
+        }
+        public static void WinPaddleballLeft()
+        {
+            Paddleball game = GetPaddleball();
+            if (game == null) return;
+            Type gameType = typeof(Paddleball);
+            FieldInfo scoreLField = gameType.GetField("scoreL", BindingFlags.NonPublic | BindingFlags.Instance);
+            FieldInfo scoreRField = gameType.GetField("scoreR", BindingFlags.NonPublic | BindingFlags.Instance);
+            if (scoreLField != null && scoreRField != null)
+            {
+                scoreLField.SetValue(game, 10);
+                scoreRField.SetValue(game, 0);
+                MethodInfo updateScoreMethod = gameType.GetMethod("UpdateScore",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                updateScoreMethod?.Invoke(game, null);
+                MethodInfo changeScreenMethod = gameType.GetMethod("ChangeScreen",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                Type screenModeType = gameType.GetNestedType("ScreenMode", BindingFlags.NonPublic);
+                if (screenModeType != null && changeScreenMethod != null)
+                {
+                    Array values = Enum.GetValues(screenModeType);
+                    object whiteWin = values.GetValue(2);
+                    changeScreenMethod.Invoke(game, new object[] { whiteWin });
+                }
+            }
+        }
+        public static void WinPaddleballRight()
+        {
+            Paddleball game = GetPaddleball();
+            if (game == null) return;
+            Type gameType = typeof(Paddleball);
+            FieldInfo scoreLField = gameType.GetField("scoreL", BindingFlags.NonPublic | BindingFlags.Instance);
+            FieldInfo scoreRField = gameType.GetField("scoreR", BindingFlags.NonPublic | BindingFlags.Instance);
+            if (scoreLField != null && scoreRField != null)
+            {
+                scoreLField.SetValue(game, 0);
+                scoreRField.SetValue(game, 10);
+                MethodInfo updateScoreMethod = gameType.GetMethod("UpdateScore",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                updateScoreMethod?.Invoke(game, null);
+                MethodInfo changeScreenMethod = gameType.GetMethod("ChangeScreen",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                Type screenModeType = gameType.GetNestedType("ScreenMode", BindingFlags.NonPublic);
+                if (screenModeType != null && changeScreenMethod != null)
+                {
+                    Array values = Enum.GetValues(screenModeType);
+                    object blackWin = values.GetValue(3);
+                    changeScreenMethod.Invoke(game, new object[] { blackWin });
+                }
+            }
+        }
+        public static void SuperFastPaddleballBall()
+        {
+            Paddleball game = GetPaddleball();
+            if (game == null) return;
+            Type gameType = typeof(Paddleball);
+            FieldInfo gameBallSpeedField = gameType.GetField("gameBallSpeed",
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            if (gameBallSpeedField != null)
+            {
+                gameBallSpeedField.SetValue(game, 25f);
+            }
+        }
+        public static void MaxQuestScore()
+        {
+            VRRig.LocalRig.SetQuestScore(int.MaxValue);
+        }
+        public static void SetCustomQuestScore()
+        {
+            KeyboardManager.IsSettingQuestScore = true;
+            KeyboardManager.QuestScoreQuery = "";
+            KeyboardManager.ToggleKeyboard(true);
+            KeyboardManager.KeyboardJustOpened = true;
+            if (ExtraButtons.QuestScoreButton != null)
+                ExtraButtons.QuestScoreButton.Name = "Set Quest Score: " + KeyboardManager.QuestScoreQuery;
+        }
+        public static void UnlockSubscription()
+        {
+            if (SubscriptionManager.Instance == null) return;
+
+            Type subscriptionDetailsType = typeof(SubscriptionManager.SubscriptionDetails);
+
+            object details = Activator.CreateInstance(subscriptionDetailsType);
+
+            subscriptionDetailsType.GetField("active").SetValue(details, true);
+            subscriptionDetailsType.GetField("daysAccrued").SetValue(details, int.MaxValue);
+            subscriptionDetailsType.GetField("tier").SetValue(details, int.MaxValue);
+            subscriptionDetailsType.GetField("autoRenew").SetValue(details, true);
+            subscriptionDetailsType.GetField("autoRenewMonths").SetValue(details, int.MaxValue);
+            subscriptionDetailsType.GetField("subscriptionActiveUntilDate").SetValue(details, DateTime.MaxValue);
+
+            FieldInfo subscriptionFeatureSettingsField = subscriptionDetailsType.GetField("subscriptionFeatureSettings");
+            if (subscriptionFeatureSettingsField != null)
+            {
+                subscriptionFeatureSettingsField.SetValue(details, new[] { true, true });
+            }
+
+            typeof(SubscriptionManager).GetField("localSubscriptionDetails", BindingFlags.NonPublic | BindingFlags.Static).SetValue(null, details);
+            typeof(SubscriptionManager).GetField("_localSubscriptionDataInitialized", BindingFlags.NonPublic | BindingFlags.Static).SetValue(null, true);
+
+            if (NetworkSystem.Instance != null && NetworkSystem.Instance.LocalPlayer != null)
+            {
+                MethodInfo updateMethod = typeof(SubscriptionManager).GetMethod("UpdatePlayerSubsDetails", BindingFlags.NonPublic | BindingFlags.Instance);
+                if (updateMethod != null)
+                {
+                    updateMethod.Invoke(SubscriptionManager.Instance, new object[] { NetworkSystem.Instance.LocalPlayer, true, int.MaxValue });
+                }
+            }
+        }
+
+        private static List<PaperPlaneThrowable> cachedPaperPlanes = new List<PaperPlaneThrowable>();
+        private static float lastPaperPlaneRefresh = 0f;
+        private static float lastPlaneActionTime = 0f;
+        private static float lastPlaneSpamTime = 0f;
+        private static float lastBarrageTime = 0f;
+
+        private static List<PaperPlaneThrowable> GetAllPaperPlaneThrowables()
+        {
+            if (Time.time - lastPaperPlaneRefresh > 0.5f)
+            {
+                cachedPaperPlanes.Clear();
+                cachedPaperPlanes.AddRange(Resources.FindObjectsOfTypeAll<PaperPlaneThrowable>());
+                lastPaperPlaneRefresh = Time.time;
+            }
+            return cachedPaperPlanes;
+        }
+
+        public static void SpamPaperPlanes()
+        {
+            if (Time.time - lastPlaneSpamTime < 0.1f) return;
+            lastPlaneSpamTime = Time.time;
+
+            var planes = GetAllPaperPlaneThrowables();
+            if (planes.Count == 0) return;
+
+            var interactor = EquipmentInteractor.instance;
+            if (interactor == null) return;
+
+            foreach (var plane in planes)
+            {
+                if (plane != null && plane.gameObject.activeInHierarchy && plane.IsLocalObject())
+                {
+                    if (plane.currentState == TransferrableObject.PositionState.InLeftHand)
+                    {
+                        plane.OnRelease(null, interactor.leftHand);
+                    }
+                    else if (plane.currentState == TransferrableObject.PositionState.InRightHand)
+                    {
+                        plane.OnRelease(null, interactor.rightHand);
+                    }
+                }
+            }
+        }
+
+        public static void RapidPaperPlanes()
+        {
+            if (!Inputs.RightGrip && !Inputs.LeftGrip) return;
+            if (Time.time - lastPlaneActionTime < 0.05f) return;
+            lastPlaneActionTime = Time.time;
+
+            var planes = GetAllPaperPlaneThrowables();
+            if (planes.Count == 0) return;
+
+            var interactor = EquipmentInteractor.instance;
+            if (interactor == null) return;
+
+            bool rightGrip = Inputs.RightGrip;
+            bool leftGrip = Inputs.LeftGrip;
+
+            foreach (var plane in planes)
+            {
+                if (plane?.IsLocalObject() != true) continue;
+
+                if (rightGrip && plane.currentState == TransferrableObject.PositionState.InRightHand)
+                {
+                    plane.OnRelease(null, interactor.rightHand);
+                }
+                else if (leftGrip && plane.currentState == TransferrableObject.PositionState.InLeftHand)
+                {
+                    plane.OnRelease(null, interactor.leftHand);
+                }
+            }
+        }
+
+        public static void PaperPlaneGun()
+        {
+            GunLib.StartPointerSystem(() =>
+            {
+                if (Time.time - lastPlaneSpamTime < 0.1f) return;
+                lastPlaneSpamTime = Time.time;
+
+                var planes = GetAllPaperPlaneThrowables();
+                if (planes.Count == 0) return;
+
+                var interactor = EquipmentInteractor.instance;
+                if (interactor == null) return;
+
+                foreach (var plane in planes)
+                {
+                    if (plane?.IsLocalObject() != true) continue;
+
+                    if (plane.currentState == TransferrableObject.PositionState.InLeftHand)
+                    {
+                        plane.OnRelease(null, interactor.leftHand);
+                    }
+                    else if (plane.currentState == TransferrableObject.PositionState.InRightHand)
+                    {
+                        plane.OnRelease(null, interactor.rightHand);
+                    }
+                }
+            }, true);
+        }
+
+        public static void InfinitePaperPlanes()
+        {
+            var planes = GetAllPaperPlaneThrowables();
+            if (planes.Count == 0) return;
+
+            foreach (var plane in planes)
+            {
+                if (plane != null && !plane.gameObject.activeInHierarchy)
+                {
+                    plane.gameObject.SetActive(true);
+                    if (plane._renderer != null)
+                    {
+                        plane._renderer.forceRenderingOff = false;
+                    }
+                }
+            }
+        }
+
+        private static System.Reflection.FieldInfo projectileField;
+        private static bool projectileFieldInitialized = false;
+
+        public static void PaperPlaneBarrage()
+        {
+            if (Time.time - lastBarrageTime < 0.2f) return;
+            lastBarrageTime = Time.time;
+
+            var planes = GetAllPaperPlaneThrowables();
+            if (planes.Count == 0) return;
+
+            if (!projectileFieldInitialized)
+            {
+                projectileField = typeof(PaperPlaneThrowable).GetField("_projectilePrefab",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                projectileFieldInitialized = true;
+            }
+
+            if (projectileField == null) return;
+
+            var player = GTPlayer.Instance;
+            if (player == null) return;
+
+            Vector3 center = player.transform.position + Vector3.up * 2f;
+            var objectPool = ObjectPools.instance;
+            if (objectPool == null) return;
+
+            for (int i = 0; i < 12; i++)
+            {
+                float angle = i * 30f * Mathf.Deg2Rad;
+                Vector3 dir = new Vector3(Mathf.Cos(angle), 0.3f, Mathf.Sin(angle)).normalized;
+
+                foreach (var plane in planes)
+                {
+                    if (plane?.IsLocalObject() != true) continue;
+
+                    GameObject projectile = projectileField.GetValue(plane) as GameObject;
+                    if (projectile == null) continue;
+
+                    GameObject spawned = objectPool.Instantiate(projectile, center, true);
+                    if (spawned == null) continue;
+
+                    var projectileComp = spawned.GetComponent<PaperPlaneProjectile>();
+                    if (projectileComp != null)
+                    {
+                        projectileComp.Launch(center, Quaternion.identity, dir * 25f);
+                    }
+                }
+            }
+        }
+
+        private static List<RCShip> cachedRCShips = new List<RCShip>();
+        private static float lastRCShipRefresh = 0f;
+        private static float lastRCFireTime = 0f;
+        private static float lastRCSwitchTime = 0f;
+        private static float lastRCBarrageTime = 0f;
+
+        private static System.Reflection.FieldInfo cannonToLeftField;
+        private static bool cannonFieldInitialized = false;
+
+        private static List<RCShip> GetAllRCShips()
+        {
+            if (Time.time - lastRCShipRefresh > 0.5f)
+            {
+                cachedRCShips.Clear();
+                cachedRCShips.AddRange(Resources.FindObjectsOfTypeAll<RCShip>());
+                lastRCShipRefresh = Time.time;
+            }
+            return cachedRCShips;
+        }
+
+        public static void ForceFireRCShip()
+        {
+            var ships = GetAllRCShips();
+            if (ships.Count == 0) return;
+
+            foreach (var ship in ships)
+            {
+                if (ship?.gameObject.activeInHierarchy == true && ship.OnFire != null)
+                {
+                    ship.OnFire.Invoke();
+                }
+            }
+        }
+
+        public static void RapidFireRCShip()
+        {
+            if (Time.time - lastRCFireTime < 0.1f) return;
+            lastRCFireTime = Time.time;
+
+            var ships = GetAllRCShips();
+            if (ships.Count == 0) return;
+
+            foreach (var ship in ships)
+            {
+                if (ship?.OnFire != null)
+                {
+                    ship.OnFire.Invoke();
+                }
+            }
+        }
+
+        public static void RCShipGun()
+        {
+            GunLib.StartPointerSystem(() =>
+            {
+                var ships = GetAllRCShips();
+                if (ships.Count == 0) return;
+
+                foreach (var ship in ships)
+                {
+                    if (ship?.OnFire != null)
+                    {
+                        ship.OnFire.Invoke();
+                    }
+                }
+            }, true);
+        }
+
+        public static void BoostRCShipSpeed()
+        {
+            var ships = GetAllRCShips();
+            if (ships.Count == 0) return;
+
+            foreach (var ship in ships)
+            {
+                if (ship?.rb != null)
+                {
+                    ship.rb.linearVelocity += ship.transform.forward * 20f;
+                }
+            }
+        }
+
+        public static void BoostRCShipGun()
+        {
+            GunLib.StartPointerSystem(() =>
+            {
+                Vector3 direction = GunLib.spherepointer.transform.forward;
+                var ships = GetAllRCShips();
+                if (ships.Count == 0) return;
+
+                foreach (var ship in ships)
+                {
+                    if (ship?.rb != null)
+                    {
+                        ship.rb.linearVelocity = direction * 30f;
+                    }
+                }
+            }, true);
+        }
+
+        public static void LaunchRCShipUp()
+        {
+            var ships = GetAllRCShips();
+            if (ships.Count == 0) return;
+
+            foreach (var ship in ships)
+            {
+                if (ship?.rb != null)
+                {
+                    ship.rb.linearVelocity = Vector3.up * 25f;
+                }
+            }
+        }
+
+        public static void RCShipBarrage()
+        {
+            if (Time.time - lastRCBarrageTime < 0.2f) return;
+            lastRCBarrageTime = Time.time;
+
+            var ships = GetAllRCShips();
+            if (ships.Count == 0) return;
+
+            foreach (var ship in ships)
+            {
+                if (ship?.OnFire != null)
+                {
+                    for (int i = 0; i < 5; i++)
+                    {
+                        ship.OnFire.Invoke();
+                    }
+                }
+            }
+        }
+
+        public static void EnableBodySlide()
+        {
+            GTPlayer.Instance.IsBodySliding = true;
+        }
+
+        public static void DisableBodySlide()
+        {
+            GTPlayer.Instance.IsBodySliding = false;
+        }
+        private static GorillaComputer computer;
+        private static GorillaComputer GetComputer()
+        {
+            if (computer == null)
+            {
+                computer = GorillaComputer.instance;
+            }
+            return computer;
+        }
+        public static void UnlockCompetitiveQueue()
+        {
+            var comp = GetComputer();
+            if (comp == null) return;
+            comp.allowedInCompetitive = true;
+            PlayerPrefs.SetInt("allowedInCompetitive", 1);
+            PlayerPrefs.Save();
+        }
+        public static void ForceQueueDefault()
+        {
+            var comp = GetComputer();
+            if (comp == null) return;
+            comp.JoinDefaultQueue();
+        }
+
+        public static void ForceQueueCompetitive()
+        {
+            var comp = GetComputer();
+            if (comp == null) return;
+            comp.JoinQueue("COMPETITIVE", false);
+        }
+
+        public static void ForceQueueMinigames()
+        {
+            var comp = GetComputer();
+            if (comp == null) return;
+            comp.JoinQueue("MINIGAMES", false);
+        }
+        private static PhotonNetworkController networkController;
+        private static PhotonNetworkController GetNetworkController()
+        {
+            if (networkController == null)
+            {
+                networkController = PhotonNetworkController.Instance;
+            }
+            return networkController;
+        }
+        public static void GetTotalPlayersOnline()
+        {
+            var controller = GetNetworkController();
+            if (controller == null) return;
+
+            int total = controller.TotalUsers();
+            NotifiLib.SendNotification($"Total players online: {total}");
+        }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     }
 }
+
+
+
+

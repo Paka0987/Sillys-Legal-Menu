@@ -1,8 +1,12 @@
-﻿using BepInEx;
+using BepInEx;
 using GorillaLocomotion;
 using Oculus.Platform;
 using System;
 using System.Collections;
+using System.Collections.Generic;
+using ExitGames.Client.Photon;
+using Photon.Pun;
+using Photon.Realtime;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.XR;
@@ -12,6 +16,25 @@ namespace Juul
 {
     public class GunLib : MonoBehaviour
     {
+        #region Networking Properties
+        public static bool IsGunNetworkingEnabled = true;
+        private static float gunSyncTimer = 0f;
+        private static Dictionary<Player, NetworkedGunData> networkGuns = new Dictionary<Player, NetworkedGunData>();
+
+        public class NetworkedGunData
+        {
+            public GameObject gunLineObject;
+            public GameObject spherePointer;
+            public VRRig lockedPlayer;
+            public Vector3 lr;
+            public bool isLocked;
+            public float lastSyncTime;
+            public GunLineStyle lineStyle;
+            public float lineWidth;
+            public float sphereSize;
+        }
+        #endregion
+
         private void FixedUpdate()
         {
             LineColor = Core.BaseColor;
@@ -25,13 +48,18 @@ namespace Juul
             else
                 currentLineStyle--;
 
-            if (currentLineStyle > GunLineStyle.CoiledLine)
-                currentLineStyle = GunLineStyle.Smooth;
-            if (currentLineStyle < GunLineStyle.Smooth)
-                currentLineStyle = GunLineStyle.CoiledLine;
+            if (currentLineStyle > GunLineStyle.Tentacle)
+                currentLineStyle = GunLineStyle.Normal;
+            if (currentLineStyle < GunLineStyle.Normal)
+                currentLineStyle = GunLineStyle.Tentacle;
 
-            if (Buttons.GunStyleButton != null)
-                Buttons.GunStyleButton.Name = "Gun Style: " + currentLineStyle.ToString();
+            if (ExtraButtons.GunStyleButton != null)
+                ExtraButtons.GunStyleButton.Name = "Gun Style: " + currentLineStyle.ToString();
+
+            if (IsGunNetworkingEnabled && PhotonNetwork.IsConnected)
+            {
+                SyncGunProperties();
+            }
         }
 
         public static void ChangeGunLineSize(bool forward = true)
@@ -48,8 +76,13 @@ namespace Juul
 
             GunLineWidth = LineScales[currentLineSize];
 
-            if (Buttons.GunLineSizeButton != null)
-                Buttons.GunLineSizeButton.Name = string.Format("Gun Line Size: {0}", GunLineWidth);
+            if (ExtraButtons.GunLineSizeButton != null)
+                ExtraButtons.GunLineSizeButton.Name = string.Format("Gun Line Size: {0}", GunLineWidth);
+
+            if (IsGunNetworkingEnabled && PhotonNetwork.IsConnected)
+            {
+                SyncGunProperties();
+            }
         }
 
         public static void ChangeGunSphereScale(bool forward = true)
@@ -69,31 +102,332 @@ namespace Juul
             if (spherepointer != null)
                 spherepointer.transform.localScale = Vector3.one * SphereSize;
 
-            if (Buttons.GunSphereSizeButton != null)
-                Buttons.GunSphereSizeButton.Name = string.Format("Gun Sphere Size: {0}", SphereSize);
+            if (ExtraButtons.GunSphereSizeButton != null)
+                ExtraButtons.GunSphereSizeButton.Name = string.Format("Gun Sphere Size: {0}", SphereSize);
+
+            if (IsGunNetworkingEnabled && PhotonNetwork.IsConnected)
+            {
+                SyncGunProperties();
+            }
         }
+
+        #region Networking M
+        public static void SyncGunProperties()
+        {
+            if (!IsGunNetworkingEnabled || !PhotonNetwork.IsConnected || PhotonNetwork.LocalPlayer == null) return;
+
+            ExitGames.Client.Photon.Hashtable props = new ExitGames.Client.Photon.Hashtable();
+            props["Gun_Style"] = (int)currentLineStyle;
+            props["Gun_LineWidth"] = GunLineWidth;
+            props["Gun_SphereSize"] = SphereSize;
+            props["Gun_CurrentLineSize"] = currentLineSize;
+            props["Gun_CurrentSphereSize"] = currentSphereSize;
+
+            PhotonNetwork.LocalPlayer.SetCustomProperties(props);
+        }
+
+        public static bool HasGunProperty(Player player)
+        {
+            return player != null && player.CustomProperties.ContainsKey("Gun_Style");
+        }
+
+        public static void UpdateNetworkGuns()
+        {
+            if (!IsGunNetworkingEnabled) return;
+
+            if (VRRigCache.ActiveRigs == null) return;
+
+            List<Player> currentPlayers = new List<Player>();
+
+            foreach (VRRig rig in VRRigCache.ActiveRigs)
+            {
+                if (rig == null || rig.isOfflineVRRig || rig.isMyPlayer) continue;
+                if (rig.netView == null) continue;
+
+                Player player = null;
+                try
+                {
+                    PhotonView photonView = Rigs.GetPhotonViewFromVRRig(rig);
+                    if (photonView != null && photonView.Owner != null)
+                        player = photonView.Owner;
+                }
+                catch { }
+
+                if (player == null) continue;
+                currentPlayers.Add(player);
+
+                if (HasGunProperty(player))
+                {
+                    UpdateOrCreateNetworkGun(player, rig);
+                }
+                else
+                {
+                    RemoveNetworkGun(player);
+                }
+            }
+
+            List<Player> toRemove = new List<Player>();
+            foreach (var kvp in networkGuns)
+            {
+                if (!currentPlayers.Contains(kvp.Key))
+                    toRemove.Add(kvp.Key);
+            }
+            foreach (Player p in toRemove)
+            {
+                RemoveNetworkGun(p);
+            }
+        }
+
+        private static void UpdateOrCreateNetworkGun(Player player, VRRig rig)
+        {
+            if (networkGuns.ContainsKey(player) && networkGuns[player] != null)
+            {
+                UpdateExistingNetworkGun(player, rig);
+            }
+            else
+            {
+                CreateNetworkGun(player, rig);
+            }
+        }
+
+        private static void CreateNetworkGun(Player player, VRRig rig)
+        {
+            NetworkedGunData gunData = new NetworkedGunData();
+
+            if (player.CustomProperties.ContainsKey("Gun_Style"))
+                gunData.lineStyle = (GunLineStyle)(int)player.CustomProperties["Gun_Style"];
+            if (player.CustomProperties.ContainsKey("Gun_LineWidth"))
+                gunData.lineWidth = (float)player.CustomProperties["Gun_LineWidth"];
+            if (player.CustomProperties.ContainsKey("Gun_SphereSize"))
+                gunData.sphereSize = (float)player.CustomProperties["Gun_SphereSize"];
+
+            gunData.gunLineObject = new GameObject($"NetworkGun_{player.NickName}");
+            gunData.gunLineObject.transform.SetParent(rig.transform);
+
+            LineRenderer lineRenderer = gunData.gunLineObject.AddComponent<LineRenderer>();
+            lineRenderer.useWorldSpace = true;
+            lineRenderer.startWidth = gunData.lineWidth;
+            lineRenderer.endWidth = gunData.lineWidth;
+
+            Material lineMaterial = new Material(Core.UberShader);
+            lineRenderer.material = lineMaterial;
+
+            gunData.spherePointer = LineLib.CreateSphere(Vector3.zero, gunData.sphereSize, Core.BaseColor, true);
+            gunData.spherePointer.transform.SetParent(rig.transform);
+
+            networkGuns[player] = gunData;
+        }
+
+        private static void UpdateExistingNetworkGun(Player player, VRRig rig)
+        {
+            NetworkedGunData gunData = networkGuns[player];
+
+            if (player.CustomProperties.ContainsKey("Gun_Style"))
+            {
+                GunLineStyle newStyle = (GunLineStyle)(int)player.CustomProperties["Gun_Style"];
+                if (gunData.lineStyle != newStyle)
+                {
+                    gunData.lineStyle = newStyle;
+                }
+            }
+
+            if (player.CustomProperties.ContainsKey("Gun_LineWidth"))
+            {
+                float newWidth = (float)player.CustomProperties["Gun_LineWidth"];
+                if (Math.Abs(gunData.lineWidth - newWidth) > 0.001f)
+                {
+                    gunData.lineWidth = newWidth;
+                    LineRenderer lr = gunData.gunLineObject.GetComponent<LineRenderer>();
+                    if (lr != null)
+                    {
+                        lr.startWidth = newWidth;
+                        lr.endWidth = newWidth;
+                    }
+                }
+            }
+
+            if (player.CustomProperties.ContainsKey("Gun_SphereSize"))
+            {
+                float newSize = (float)player.CustomProperties["Gun_SphereSize"];
+                if (Math.Abs(gunData.sphereSize - newSize) > 0.001f)
+                {
+                    gunData.sphereSize = newSize;
+                    if (gunData.spherePointer != null)
+                        gunData.spherePointer.transform.localScale = Vector3.one * newSize;
+                }
+            }
+
+            Transform handTransform = GetHandTransform(rig);
+            if (handTransform != null && gunData.spherePointer != null)
+            {
+                Vector3 handPos = handTransform.position;
+                Vector3 forward = handTransform.forward;
+
+                RaycastHit hit;
+                if (Physics.Raycast(handPos, forward, out hit, 512f, NoInvisLayerMask()))
+                {
+                    gunData.spherePointer.transform.position = hit.point;
+                    gunData.spherePointer.SetActive(true);
+                    UpdateNetworkGunLine(gunData, handPos, hit.point);
+                }
+                else
+                {
+                    gunData.spherePointer.SetActive(false);
+                    if (gunData.gunLineObject != null)
+                        gunData.gunLineObject.SetActive(false);
+                }
+            }
+        }
+
+        private static void UpdateNetworkGunLine(NetworkedGunData gunData, Vector3 handPos, Vector3 targetPos)
+        {
+            if (gunData.gunLineObject == null) return;
+
+            LineRenderer lr = gunData.gunLineObject.GetComponent<LineRenderer>();
+            if (lr == null) return;
+
+            gunData.gunLineObject.SetActive(true);
+
+            Vector3 midPoint = (handPos + targetPos) / 2f;
+            gunData.lr = Vector3.Lerp(gunData.lr, midPoint, Time.deltaTime * 6f);
+
+            SetNetworkLineStyle(lr, handPos, targetPos, gunData.lr, gunData.lineStyle);
+
+            lr.startColor = LineColor;
+            lr.endColor = LineColor;
+
+            Material material = lr.material;
+            if (material != null)
+                material.color = LineColor;
+        }
+
+        private static void SetNetworkLineStyle(LineRenderer lr, Vector3 start, Vector3 end, Vector3 smoothMid, GunLineStyle style)
+        {
+            switch (style)
+            {
+                case GunLineStyle.Normal:
+                    CurveLineRendererNetwork(lr, start, smoothMid, end);
+                    break;
+                case GunLineStyle.Straight:
+                    lr.positionCount = 2;
+                    lr.SetPosition(0, start);
+                    lr.SetPosition(1, end);
+                    break;
+                case GunLineStyle.Morphine:
+                    DrawMorphineLineNetwork(lr, start, end, 150);
+                    break;
+                case GunLineStyle.Flare:
+                    DrawFlareLineNetwork(lr, start, end, 150);
+                    break;
+                case GunLineStyle.Tentacle:
+                    DrawTentacleLineNetwork(lr, start, end, 150);
+                    break;
+            }
+        }
+
+        private static void RemoveNetworkGun(Player player)
+        {
+            if (networkGuns.ContainsKey(player))
+            {
+                NetworkedGunData gunData = networkGuns[player];
+                if (gunData.gunLineObject != null)
+                    GameObject.Destroy(gunData.gunLineObject);
+                if (gunData.spherePointer != null)
+                    LineLib.DestroySphere(gunData.spherePointer);
+                networkGuns.Remove(player);
+            }
+        }
+
+        private static Transform GetHandTransform(VRRig rig)
+        {
+            bool isRightHanded = true;
+            if (PhotonNetwork.LocalPlayer != null && PhotonNetwork.LocalPlayer.CustomProperties.ContainsKey("Juul_H"))
+                isRightHanded = (bool)PhotonNetwork.LocalPlayer.CustomProperties["Juul_H"];
+
+            return isRightHanded ? rig.rightHandTransform : rig.leftHandTransform;
+        }
+
+        private static void CurveLineRendererNetwork(LineRenderer lr, Vector3 start, Vector3 mid, Vector3 end)
+        {
+            lr.positionCount = LineCurve;
+            for (int i = 0; i < LineCurve; i++)
+            {
+                float t = (float)i / (LineCurve - 1);
+                lr.SetPosition(i, CalculateBezierPoint(start, mid, end, t));
+            }
+        }
+
+        private static void DrawMorphineLineNetwork(LineRenderer lr, Vector3 start, Vector3 end, int segments)
+        {
+            lr.positionCount = segments;
+            for (int i = 0; i < segments; i++)
+            {
+                float t = (float)i / (segments - 1);
+                Vector3 pos = Vector3.Lerp(start, end, t);
+                float waveX = Mathf.Sin(Time.time * 3f + i * 0.2f) * 0.02f;
+                float waveY = Mathf.Cos(Time.time * 2.5f + i * 0.15f) * 0.02f;
+                float waveZ = Mathf.Sin(Time.time * 3.5f + i * 0.25f) * 0.02f;
+                pos += new Vector3(waveX, waveY, waveZ);
+                lr.SetPosition(i, pos);
+            }
+        }
+
+        private static void DrawFlareLineNetwork(LineRenderer lr, Vector3 start, Vector3 end, int points)
+        {
+            lr.positionCount = points;
+            for (int i = 0; i < points; i++)
+            {
+                float t = (float)i / (points - 1);
+                Vector3 pos = Vector3.Lerp(start, end, t);
+                lr.SetPosition(i, pos);
+            }
+        }
+
+        private static void DrawTentacleLineNetwork(LineRenderer lr, Vector3 start, Vector3 end, int points)
+        {
+            lr.positionCount = points;
+            Vector3 direction = (end - start).normalized;
+            Vector3 up = Vector3.up;
+            Vector3 right = Vector3.Cross(direction, up).normalized;
+            Vector3 forward = Vector3.Cross(right, up).normalized;
+
+            float tentacleLength = Vector3.Distance(start, end);
+
+            for (int i = 0; i < points; i++)
+            {
+                float t = (float)i / (points - 1);
+                Vector3 basePos = Vector3.Lerp(start, end, t);
+
+                float sinWave = Mathf.Sin(t * Mathf.PI * 3f + Time.time * 3f);
+                float cosWave = Mathf.Cos(t * Mathf.PI * 2.5f + Time.time * 2.5f);
+                float secondaryWave = Mathf.Sin(t * Mathf.PI * 5f + Time.time * 4f) * 0.5f;
+
+                Vector3 tentacleOffset = up * (sinWave * 0.08f * (1 - t)) +
+                                        right * (cosWave * 0.06f * (1 - t)) +
+                                        forward * (secondaryWave * 0.04f * t);
+
+                float thickness = Mathf.Lerp(1f, 0.2f, Mathf.Pow(t, 1.5f));
+                lr.startWidth = GunLineWidth;
+                lr.endWidth = GunLineWidth * thickness;
+
+                float curveIntensity = Mathf.Sin(t * Mathf.PI) * 0.08f * tentacleLength;
+                tentacleOffset += right * curveIntensity;
+
+                float depthOffset = Mathf.Sin(t * Mathf.PI * 4f + Time.time * 5f) * 0.03f;
+                tentacleOffset += forward * depthOffset;
+
+                lr.SetPosition(i, basePos + tentacleOffset);
+            }
+        }
+        #endregion
 
         public enum GunLineStyle
         {
-            Smooth,
+            Normal,
             Straight,
-            Wavy,
-            DynamicPulse,
-            Electric,
-            Spiral,
-            Throb,
-            Helix,
+            Morphine,
             Flare,
-            Zigzag,
-            Meteor,
-            Burst,
-            Spiral1,
-            Sparky,
-            ElectricZag,
-            WaterRipple,
-            Webbed,
-            BurstPulse,
-            CoiledLine,
+            Tentacle,
         }
 
         public static int LineCurve = 150;
@@ -107,7 +441,7 @@ namespace Juul
         public static Vector3 lr;
         public static Color32 PointerColor = Core.BaseColor;
         public static Color32 LineColor = Core.BaseColor;
-        public static GunLineStyle currentLineStyle = GunLineStyle.Smooth;
+        public static GunLineStyle currentLineStyle = GunLineStyle.Normal;
         public static RaycastHit raycastHit;
         public static float SphereSize = 0.04f;
         public static float GunLineWidth = 0.01f;
@@ -121,6 +455,10 @@ namespace Juul
         private static Material _gunLineMaterial;
         private static Coroutine _gunLineCoroutine;
         private static MonoBehaviour _gunLineHost;
+
+        private static Vector3[] _morphinePositions = new Vector3[150];
+        private static float[] _morphineTimers = new float[150];
+        private static Vector3[] _morphineVelocities = new Vector3[150];
 
         private static LineRenderer GetOrCreateGunLine()
         {
@@ -201,334 +539,17 @@ namespace Juul
         {
             switch (currentLineStyle)
             {
-                case GunLineStyle.Smooth: CurveLineRenderer(lineRenderer, start, smoothMid, end); break;
+                case GunLineStyle.Normal: CurveLineRenderer(lineRenderer, start, smoothMid, end); break;
                 case GunLineStyle.Straight: lineRenderer.positionCount = 2; lineRenderer.SetPosition(0, start); lineRenderer.SetPosition(1, end); break;
-                case GunLineStyle.Wavy: DrawWavyLine(lineRenderer, start, end, 20, 0.1f, 5f); break;
-                case GunLineStyle.DynamicPulse: DrawDynamicPulse(lineRenderer, start, end, 50); break;
-                case GunLineStyle.Electric: DrawElectricLine(lineRenderer, start, end, 30, 0.2f); break;
-                case GunLineStyle.Spiral: DrawSpiralLine(lineRenderer, start, end, 250, 0.05f, 15); break;
-                case GunLineStyle.Throb: DrawThrobLine(lineRenderer, start, end, 30); break;
-                case GunLineStyle.Helix: DrawHelixLine(lineRenderer, start, end, 250, 0.05f, 15); break;
-                case GunLineStyle.Flare: DrawFlareLine(lineRenderer, start, end, 30); break;
-                case GunLineStyle.Zigzag: DrawZigzagLine(lineRenderer, start, end, 20, 0.1f); break;
-                case GunLineStyle.Meteor: DrawMeteorLine(lineRenderer, start, end, 30); break;
-                case GunLineStyle.Burst: DrawBurstLine(lineRenderer, start, end, 30); break;
-                case GunLineStyle.Spiral1: DrawSpiralLine1(lineRenderer, start, end, 250, 0.05f, 15); break;
-                case GunLineStyle.Sparky: DrawSparkyLine(lineRenderer, start, end, 50); break;
-                case GunLineStyle.ElectricZag: DrawElectricZagLine(lineRenderer, start, end, 50); break;
-                case GunLineStyle.WaterRipple: DrawWaterRippleLine(lineRenderer, start, end, 50); break;
-                case GunLineStyle.Webbed: DrawWebbedLine(lineRenderer, start, end, 50); break;
-                case GunLineStyle.BurstPulse: DrawBurstPulseLine(lineRenderer, start, end, 50); break;
-                case GunLineStyle.CoiledLine: DrawCoiledLine(lineRenderer, start, end, 50); break;
+                case GunLineStyle.Morphine: DrawMorphineLine(lineRenderer, start, end, 150); break;
+                case GunLineStyle.Flare: DrawFlareLine(lineRenderer, start, end, 150); break;
+                case GunLineStyle.Tentacle: DrawTentacleLine(lineRenderer, start, end, 150); break;
             }
         }
 
         public static void CycleLineStyle()
         {
             currentLineStyle = (GunLineStyle)(((int)currentLineStyle + 1) % Enum.GetNames(typeof(GunLineStyle)).Length);
-        }
-
-        private static void DrawThrobLine(LineRenderer lr, Vector3 start, Vector3 end, int points)
-        {
-            lr.positionCount = points;
-            float pulse = Mathf.Abs(Mathf.Sin(Time.time * 4f)) * 0.05f;
-            for (int i = 0; i < points; i++)
-            {
-                float t = (float)i / (points - 1);
-                Vector3 pos = Vector3.Lerp(start, end, t);
-                pos += Vector3.up * Mathf.Sin(t * Mathf.PI * 2 + Time.time * 4f) * pulse;
-                lr.SetPosition(i, pos);
-            }
-            lr.SetPosition(0, start);
-            lr.SetPosition(points - 1, end);
-        }
-
-        private static void DrawWavyLine(LineRenderer lr, Vector3 start, Vector3 end, int points, float amplitude, float frequency)
-        {
-            lr.positionCount = points;
-            for (int i = 0; i < points; i++)
-            {
-                float t = (float)i / (points - 1);
-                Vector3 pos = Vector3.Lerp(start, end, t);
-                pos.y += Mathf.Sin(Time.time * frequency + t * Mathf.PI * 2) * amplitude;
-                lr.SetPosition(i, pos);
-            }
-            lr.SetPosition(0, start);
-            lr.SetPosition(points - 1, end);
-        }
-
-        private static void DrawDynamicPulse(LineRenderer lr, Vector3 start, Vector3 end, int points)
-        {
-            lr.positionCount = points;
-            for (int i = 0; i < points; i++)
-            {
-                float t = (float)i / (points - 1);
-                Vector3 pos = Vector3.Lerp(start, end, t);
-                float pulse = Mathf.Abs(Mathf.Sin(Time.time * 5f + t * 10f)) * 0.05f;
-                pos += Vector3.up * pulse;
-                lr.SetPosition(i, pos);
-            }
-            lr.SetPosition(0, start);
-            lr.SetPosition(points - 1, end);
-        }
-
-        private static void DrawElectricLine(LineRenderer lr, Vector3 start, Vector3 end, int segments, float jagAmount)
-        {
-            lr.positionCount = segments;
-            for (int i = 0; i < segments; i++)
-            {
-                float t = (float)i / (segments - 1);
-                Vector3 pos = Vector3.Lerp(start, end, t);
-                pos += Random.insideUnitSphere * jagAmount * Mathf.Sin(Time.time * 20f);
-                lr.SetPosition(i, pos);
-            }
-            lr.SetPosition(0, start);
-            lr.SetPosition(segments - 1, end);
-        }
-
-        private static void DrawSpiralLine(LineRenderer lr, Vector3 start, Vector3 end, int points, float radius, float twists)
-        {
-            lr.positionCount = points;
-            Vector3 direction = end - start;
-            for (int i = 0; i < points; i++)
-            {
-                float t = (float)i / (points - 1);
-                Vector3 pos = Vector3.Lerp(start, end, t);
-                float angle = t * twists * Mathf.PI * 2;
-                Vector3 offset = new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0) * radius;
-                pos += Quaternion.LookRotation(direction) * offset;
-                lr.SetPosition(i, pos);
-            }
-            lr.SetPosition(0, start);
-            lr.SetPosition(points - 1, end);
-        }
-
-        private static void DrawSpiralLine1(LineRenderer lr, Vector3 start, Vector3 end, int points, float radius, int turns)
-        {
-            lr.positionCount = points;
-            Vector3 direction = (end - start).normalized;
-            Vector3 up = Vector3.up;
-            if (Mathf.Abs(Vector3.Dot(direction, up)) > 0.9f) up = Vector3.right;
-            Vector3 right = Vector3.Cross(direction, up).normalized;
-            up = Vector3.Cross(right, direction).normalized;
-            for (int i = 0; i < points; i++)
-            {
-                float t = (float)i / (points - 1);
-                Vector3 basePos = Vector3.Lerp(start, end, t);
-                float angle = t * turns * 2f * Mathf.PI + Time.time * 5f;
-                Vector3 offset = right * Mathf.Cos(angle) + up * Mathf.Sin(angle);
-                Vector3 styled = basePos + offset * radius;
-                lr.SetPosition(i, styled);
-            }
-            lr.SetPosition(0, start);
-            lr.SetPosition(points - 1, end);
-        }
-
-        private static void DrawHelixLine(LineRenderer lr, Vector3 start, Vector3 end, int points, float radius, float twists)
-        {
-            lr.positionCount = points;
-            Vector3 direction = end - start;
-            for (int i = 0; i < points; i++)
-            {
-                float t = (float)i / (points - 1);
-                Vector3 pos = Vector3.Lerp(start, end, t);
-                float angle = t * twists * Mathf.PI * 2 + Time.time * 3f;
-                Vector3 offset = new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0) * radius;
-                pos += Quaternion.LookRotation(direction) * offset;
-                lr.SetPosition(i, pos);
-            }
-            lr.SetPosition(0, start);
-            lr.SetPosition(points - 1, end);
-        }
-
-        private static void DrawFlareLine(LineRenderer lr, Vector3 start, Vector3 end, int points)
-        {
-            lr.positionCount = points;
-            for (int i = 0; i < points; i++)
-            {
-                float t = (float)i / (points - 1);
-                Vector3 pos = Vector3.Lerp(start, end, t);
-                lr.startWidth = Mathf.Lerp(0.02f, 0.08f, 1 - t);
-                lr.endWidth = 0.01f;
-                lr.SetPosition(i, pos);
-            }
-            lr.SetPosition(0, start);
-            lr.SetPosition(points - 1, end);
-        }
-
-        private static void DrawZigzagLine(LineRenderer lr, Vector3 start, Vector3 end, int points, float amplitude)
-        {
-            lr.positionCount = points;
-            Vector3 direction = (end - start).normalized;
-            Vector3 right = Vector3.Cross(direction, Vector3.up).normalized;
-            for (int i = 0; i < points; i++)
-            {
-                float t = (float)i / (points - 1);
-                Vector3 pos = Vector3.Lerp(start, end, t);
-                if (i % 2 == 0)
-                    pos += right * amplitude;
-                else
-                    pos -= right * amplitude;
-                lr.SetPosition(i, pos);
-            }
-            lr.SetPosition(0, start);
-            lr.SetPosition(points - 1, end);
-        }
-
-        private static void DrawBurstLine(LineRenderer lr, Vector3 start, Vector3 end, int points)
-        {
-            lr.positionCount = points;
-            float burst = Mathf.Abs(Mathf.Sin(Time.time * 6f)) * 0.2f;
-            for (int i = 0; i < points; i++)
-            {
-                float t = (float)i / (points - 1);
-                Vector3 pos = Vector3.Lerp(start, end, t);
-                pos += Random.insideUnitSphere * burst;
-                lr.SetPosition(i, pos);
-            }
-            lr.SetPosition(0, start);
-            lr.SetPosition(points - 1, end);
-        }
-
-        private static void DrawMeteorLine(LineRenderer lr, Vector3 start, Vector3 end, int points)
-        {
-            lr.positionCount = points;
-            for (int i = 0; i < points; i++)
-            {
-                float t = (float)i / (points - 1);
-                Vector3 pos = Vector3.Lerp(start, end, t);
-                lr.startWidth = Mathf.Lerp(0.1f, 0.02f, t);
-                lr.endWidth = 0.01f;
-                lr.SetPosition(i, pos);
-            }
-            lr.SetPosition(0, start);
-            lr.SetPosition(points - 1, end);
-        }
-
-        private static void DrawSparkyLine(LineRenderer lr, Vector3 start, Vector3 end, int points)
-        {
-            lr.positionCount = points;
-            Vector3 direction = (end - start).normalized;
-            Vector3 up = Vector3.up;
-            if (Mathf.Abs(Vector3.Dot(direction, up)) > 0.9f) up = Vector3.right;
-            Vector3 right = Vector3.Cross(direction, up).normalized;
-            up = Vector3.Cross(right, direction).normalized;
-
-            for (int i = 0; i < points; i++)
-            {
-                float t = (float)i / (points - 1);
-                Vector3 basePos = Vector3.Lerp(start, end, t);
-                float hash = Mathf.PerlinNoise(t * 12f, Time.time * 4f) * 2f - 1f;
-                float amplitude = 0.1f * Mathf.Pow(1f - t, 0.3f);
-                Vector3 styled = basePos + (right * hash + up * (1f - Mathf.Abs(hash))) * amplitude;
-                lr.SetPosition(i, styled);
-            }
-            lr.SetPosition(0, start);
-            lr.SetPosition(points - 1, end);
-        }
-
-        private static void DrawElectricZagLine(LineRenderer lr, Vector3 start, Vector3 end, int points)
-        {
-            lr.positionCount = points;
-            Vector3 direction = (end - start).normalized;
-            Vector3 right = Vector3.Cross(direction, Vector3.up).normalized;
-
-            for (int i = 0; i < points; i++)
-            {
-                float t = (float)i / (points - 1);
-                Vector3 basePos = Vector3.Lerp(start, end, t);
-                float segs = 20f;
-                float phase = Mathf.Floor(t * segs) % 2 == 0 ? 1f : -1f;
-                float amplitude = 0.06f;
-                Vector3 styled = basePos + right * phase * amplitude;
-                lr.SetPosition(i, styled);
-            }
-            lr.SetPosition(0, start);
-            lr.SetPosition(points - 1, end);
-        }
-
-        private static void DrawWaterRippleLine(LineRenderer lr, Vector3 start, Vector3 end, int points)
-        {
-            lr.positionCount = points;
-            Vector3 direction = (end - start).normalized;
-            Vector3 up = Vector3.up;
-            if (Mathf.Abs(Vector3.Dot(direction, up)) > 0.9f) up = Vector3.right;
-
-            for (int i = 0; i < points; i++)
-            {
-                float t = (float)i / (points - 1);
-                Vector3 basePos = Vector3.Lerp(start, end, t);
-                float angle = t * 12f * Mathf.PI + Time.time * 2f;
-                float amplitude = 0.04f;
-                Vector3 styled = basePos + up * Mathf.Sin(angle) * amplitude;
-                lr.SetPosition(i, styled);
-            }
-            lr.SetPosition(0, start);
-            lr.SetPosition(points - 1, end);
-        }
-
-        private static void DrawWebbedLine(LineRenderer lr, Vector3 start, Vector3 end, int points)
-        {
-            lr.positionCount = points;
-            Vector3 direction = (end - start).normalized;
-            Vector3 up = Vector3.up;
-            Vector3 right = Vector3.Cross(direction, up).normalized;
-            up = Vector3.Cross(right, direction).normalized;
-
-            for (int i = 0; i < points; i++)
-            {
-                float t = (float)i / (points - 1);
-                Vector3 basePos = Vector3.Lerp(start, end, t);
-                float angle = t * 20f * Mathf.PI + Time.time * 6f;
-                float amplitude = 0.03f;
-                Vector3 styled = basePos + (right * Mathf.Cos(angle) + up * Mathf.Sin(angle)) * amplitude;
-                lr.SetPosition(i, styled);
-            }
-            lr.SetPosition(0, start);
-            lr.SetPosition(points - 1, end);
-        }
-
-        private static void DrawBurstPulseLine(LineRenderer lr, Vector3 start, Vector3 end, int points)
-        {
-            lr.positionCount = points;
-            Vector3 right = Vector3.Cross((end - start).normalized, Vector3.up).normalized;
-
-            for (int i = 0; i < points; i++)
-            {
-                float t = (float)i / (points - 1);
-                Vector3 basePos = Vector3.Lerp(start, end, t);
-                float pulse = Mathf.PingPong(t * 10f - Time.time * 5f, 1f);
-                float amplitude = 0.1f * pulse * (1f - t);
-                Vector3 styled = basePos + right * amplitude;
-                lr.SetPosition(i, styled);
-            }
-            lr.SetPosition(0, start);
-            lr.SetPosition(points - 1, end);
-        }
-
-        private static void DrawCoiledLine(LineRenderer lr, Vector3 start, Vector3 end, int points)
-        {
-            lr.positionCount = points;
-            Vector3 direction = (end - start).normalized;
-            Vector3 up = Vector3.up;
-            if (Mathf.Abs(Vector3.Dot(direction, up)) > 0.9f) up = Vector3.right;
-            Vector3 right = Vector3.Cross(direction, up).normalized;
-            up = Vector3.Cross(right, direction).normalized;
-
-            float coilTurns = 8f;
-            float coilRadius = 0.025f;
-
-            for (int i = 0; i < points; i++)
-            {
-                float t = (float)i / (points - 1);
-                Vector3 basePos = Vector3.Lerp(start, end, t);
-                float coilAngle = t * 2f * Mathf.PI * coilTurns + Time.time * 5f;
-                Vector3 coilOffset = right * Mathf.Cos(coilAngle) + up * Mathf.Sin(coilAngle);
-                Vector3 styled = basePos + coilOffset * coilRadius;
-                lr.SetPosition(i, styled);
-            }
-            lr.SetPosition(0, start);
-            lr.SetPosition(points - 1, end);
         }
 
         private static Vector3 CalculateBezierPoint(Vector3 start, Vector3 mid, Vector3 end, float t)
@@ -546,6 +567,135 @@ namespace Juul
             }
             lineRenderer.SetPosition(0, start);
             lineRenderer.SetPosition(LineCurve - 1, end);
+        }
+
+        private static void DrawMorphineLine(LineRenderer lr, Vector3 start, Vector3 end, int segments)
+        {
+            lr.positionCount = segments;
+
+            if (_morphinePositions[0] == Vector3.zero)
+            {
+                for (int i = 0; i < segments; i++)
+                {
+                    float t = (float)i / (segments - 1);
+                    _morphinePositions[i] = Vector3.Lerp(start, end, t);
+                    _morphineVelocities[i] = Vector3.zero;
+                }
+            }
+
+            float segmentLength = Vector3.Distance(start, end) / segments;
+            float stiffness = 0.95f;
+            float damping = 0.98f;
+            float zeroGravityStrength = 0.2f;
+
+            Vector3 zeroGravityNoise = new Vector3(
+                Mathf.Sin(Time.time * 1.7f) * 0.03f,
+                Mathf.Cos(Time.time * 1.3f) * 0.03f,
+                Mathf.Sin(Time.time * 2.1f) * 0.03f
+            );
+
+            _morphinePositions[0] = start;
+            _morphinePositions[segments - 1] = end;
+
+            for (int iteration = 0; iteration < 5; iteration++)
+            {
+                for (int i = 1; i < segments - 1; i++)
+                {
+                    Vector3 targetPos = _morphinePositions[i];
+
+                    targetPos += zeroGravityNoise * zeroGravityStrength * (1 - Mathf.Abs((float)i / segments - 0.5f) * 2);
+
+                    Vector3 toPrev = _morphinePositions[i - 1] - targetPos;
+                    Vector3 toNext = _morphinePositions[i + 1] - targetPos;
+
+                    Vector3 springForce = (toPrev + toNext) * stiffness;
+                    _morphineVelocities[i] += springForce * Time.deltaTime * 20f;
+                    _morphineVelocities[i] *= damping;
+
+                    targetPos += _morphineVelocities[i] * Time.deltaTime;
+
+                    if (toPrev.magnitude > segmentLength * 1.2f)
+                        targetPos = _morphinePositions[i - 1] - toPrev.normalized * segmentLength;
+                    if (toNext.magnitude > segmentLength * 1.2f)
+                        targetPos = _morphinePositions[i + 1] - toNext.normalized * segmentLength;
+
+                    float waveX = Mathf.Sin(Time.time * 3f + i * 0.2f) * 0.02f;
+                    float waveY = Mathf.Cos(Time.time * 2.5f + i * 0.15f) * 0.02f;
+                    float waveZ = Mathf.Sin(Time.time * 3.5f + i * 0.25f) * 0.02f;
+
+                    targetPos += new Vector3(waveX, waveY, waveZ);
+
+                    _morphinePositions[i] = Vector3.Lerp(_morphinePositions[i], targetPos, Time.deltaTime * 15f);
+                    lr.SetPosition(i, _morphinePositions[i]);
+                }
+            }
+
+            lr.SetPosition(0, start);
+            lr.SetPosition(segments - 1, end);
+        }
+
+        private static void DrawFlareLine(LineRenderer lr, Vector3 start, Vector3 end, int points)
+        {
+            lr.positionCount = points;
+            for (int i = 0; i < points; i++)
+            {
+                float t = (float)i / (points - 1);
+                Vector3 pos = Vector3.Lerp(start, end, t);
+
+                float widthMultiplier = Mathf.Lerp(0.5f, 3f, t);
+                lr.startWidth = GunLineWidth;
+                lr.endWidth = GunLineWidth * widthMultiplier;
+                lr.SetPosition(i, pos);
+            }
+            lr.SetPosition(0, start);
+            lr.SetPosition(points - 1, end);
+        }
+
+        private static void DrawTentacleLine(LineRenderer lr, Vector3 start, Vector3 end, int points)
+        {
+            lr.positionCount = points;
+            Vector3 direction = (end - start).normalized;
+            Vector3 up = Vector3.up;
+            Vector3 right = Vector3.Cross(direction, up).normalized;
+            Vector3 forward = Vector3.Cross(right, up).normalized;
+
+            float tentacleLength = Vector3.Distance(start, end);
+
+            for (int i = 0; i < points; i++)
+            {
+                float t = (float)i / (points - 1);
+                Vector3 basePos = Vector3.Lerp(start, end, t);
+
+                float mainSine = Mathf.Sin(t * Mathf.PI * 3f + Time.time * 3f);
+                float mainCosine = Mathf.Cos(t * Mathf.PI * 2.5f + Time.time * 2.5f);
+                float secondaryWave = Mathf.Sin(t * Mathf.PI * 5f + Time.time * 4f) * 0.5f;
+                float tertiaryWave = Mathf.Cos(t * Mathf.PI * 6f + Time.time * 3.5f) * 0.3f;
+
+                Vector3 tentacleOffset = up * (mainSine * 0.1f * (1 - t)) +
+                                        right * (mainCosine * 0.08f * (1 - t)) +
+                                        forward * (secondaryWave * 0.06f * t);
+
+                tentacleOffset += up * (tertiaryWave * 0.04f * Mathf.Sin(t * Mathf.PI));
+
+                float thickness = Mathf.Lerp(1f, 0.15f, Mathf.Pow(t, 1.5f));
+                lr.startWidth = GunLineWidth;
+                lr.endWidth = GunLineWidth * thickness;
+
+                float curveIntensity = Mathf.Sin(t * Mathf.PI) * 0.1f * tentacleLength;
+                tentacleOffset += right * curveIntensity;
+
+                float depthOffset = Mathf.Sin(t * Mathf.PI * 4f + Time.time * 5f) * 0.04f;
+                float depthOffset2 = Mathf.Cos(t * Mathf.PI * 3f + Time.time * 4f) * 0.02f;
+                tentacleOffset += forward * (depthOffset + depthOffset2);
+
+                float twistOffset = Mathf.Sin(t * Mathf.PI * 8f + Time.time * 6f) * 0.02f;
+                tentacleOffset += right * twistOffset;
+
+                lr.SetPosition(i, basePos + tentacleOffset);
+            }
+
+            lr.SetPosition(0, start);
+            lr.SetPosition(points - 1, end);
         }
 
         private static IEnumerator StartCurvyLineRenderer(LineRenderer lineRenderer, Vector3 start, Vector3 end, Vector3 smoothMid)
@@ -792,3 +942,6 @@ namespace Juul
         public static bool gunLeft = false;
     }
 }
+
+
+
