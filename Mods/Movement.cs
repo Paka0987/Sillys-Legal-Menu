@@ -495,14 +495,14 @@ namespace Juul
                 }
             }
         }
-        public static void FastSwim()
+        /*public static void FastSwim()
         {
             GTPlayer.Instance.swimmingParams.swimmingVelocityOutOfWaterDrainRate = 25f;
         }
         public static void FixWater()
         {
             GTPlayer.Instance.swimmingParams.swimmingVelocityOutOfWaterDrainRate = 5f;
-        }
+        }*/
         public static void PlayspaceAbuse()
         {
             if (Inputs.RightPrimary)
@@ -613,7 +613,6 @@ namespace Juul
         {
             if (GTPlayer.Instance == null) return;
 
-            // Mouse look
             if (UnityInput.Current.GetMouseButton(1))
             {
                 var look = UnityInput.Current.mousePosition - pos;
@@ -624,30 +623,24 @@ namespace Juul
             var tr = GTPlayer.Instance.bodyCollider.transform;
             var rb = GTPlayer.Instance.bodyCollider.attachedRigidbody;
 
-            // Get input
             Vector2 joystick = SteamVR_Actions.gorillaTag_LeftJoystick2DAxis.GetAxis(SteamVR_Input_Sources.LeftHand);
             Vector2 stick = joystick.magnitude > .05f ? joystick : new Vector2(
                 (UnityInput.Current.GetKey(KeyCode.D) ? 1 : 0) - (UnityInput.Current.GetKey(KeyCode.A) ? 1 : 0),
                 (UnityInput.Current.GetKey(KeyCode.W) ? 1 : 0) - (UnityInput.Current.GetKey(KeyCode.S) ? 1 : 0));
 
-            // Normalize stick input
             if (stick.magnitude > 1f) stick.Normalize();
 
             var armLength = 0.56f;
             var walkSpeed = 6f;
             var direction = (tr.forward * stick.y + tr.right * stick.x).normalized;
 
-            // Sprint
             bool isSprinting = Inputs.LeftJoystick || UnityInput.Current.GetKey(KeyCode.LeftShift);
             if (isSprinting) walkSpeed *= 2.5f;
 
-            // Movement with ground collision
             if (stick.magnitude > 0.05f)
             {
-                // Calculate new position with collision
                 Vector3 newPosition = tr.position + direction * walkSpeed * Time.deltaTime;
 
-                // Ground raycast to maintain floor contact
                 RaycastHit groundHit;
                 if (Physics.Raycast(newPosition + Vector3.up * 0.5f, Vector3.down, out groundHit, 1.5f))
                 {
@@ -657,31 +650,24 @@ namespace Juul
                 }
                 else
                 {
-                    // Fall if no ground
                     rb.linearVelocity = new Vector3(direction.x * walkSpeed, rb.linearVelocity.y - 9.81f * Time.deltaTime, direction.z * walkSpeed);
                 }
 
-                // Realistic VR-like arm swing animation
                 float stepSpeed = walkSpeed * (isSprinting ? 1.5f : 1f);
                 float swingTime = Time.time * stepSpeed;
 
-                // Calculate swing intensity based on movement speed
                 float swingIntensity = Mathf.Lerp(0.5f, 1.2f, Mathf.Clamp01(walkSpeed / 15f));
 
-                // Right hand animation (follows movement rhythm)
                 float rightHandSwingX = Mathf.Sin(swingTime) * (stick.y * armLength * swingIntensity);
                 float rightHandSwingZ = Mathf.Sin(swingTime + Mathf.PI) * (Mathf.Abs(stick.x) * 0.15f);
                 float rightHandVertical = -.3f + (Mathf.Cos(swingTime * 2f) * 0.15f);
 
-                // Left hand animation (opposite rhythm)
                 float leftHandSwingX = -Mathf.Sin(swingTime) * (stick.y * armLength * swingIntensity);
                 float leftHandSwingZ = Mathf.Sin(swingTime) * (Mathf.Abs(stick.x) * 0.15f);
                 float leftHandVertical = -.3f + (Mathf.Cos(swingTime * 2f + Mathf.PI) * 0.15f);
 
-                // Add sideways arm movement for turning
                 float turnSwing = direction.x * 0.2f;
 
-                // Apply hand positions
                 GTPlayer.Instance.rightHand.controllerTransform.position = tr.position +
                     tr.forward * (rightHandSwingX + turnSwing) +
                     tr.right * (rightHandSwingZ - 0.25f + (stick.x * 0.1f)) +
@@ -692,44 +678,35 @@ namespace Juul
                     tr.right * (leftHandSwingZ + 0.25f + (stick.x * 0.1f)) +
                     new Vector3(0, leftHandVertical, 0);
 
-                // Body tilt based on movement direction
                 float bodyTilt = Mathf.Lerp(-5f, 5f, (stick.x + 1f) / 2f);
                 tr.rotation = Quaternion.Euler(0, tr.eulerAngles.y, bodyTilt * Mathf.Sin(swingTime * 2f) * 0.5f);
 
-                // Head bob for realism
                 float headBob = Mathf.Sin(swingTime * 2f) * 0.03f;
                 Camera.main.transform.localPosition = new Vector3(0, headBob, 0);
             }
             else
             {
-                // Idle animation - slight breathing movement
                 float idleBreath = Mathf.Sin(Time.time * 2f) * 0.01f;
 
                 GTPlayer.Instance.rightHand.controllerTransform.localPosition = new Vector3(0.25f, -0.3f + idleBreath, -0.2f);
                 GTPlayer.Instance.leftHand.controllerTransform.localPosition = new Vector3(-0.25f, -0.3f + idleBreath, -0.2f);
 
-                // Reset head bob
                 Camera.main.transform.localPosition = Vector3.Lerp(Camera.main.transform.localPosition, Vector3.zero, Time.deltaTime * 5f);
 
-                // Reset body tilt
                 tr.rotation = Quaternion.Euler(0, tr.eulerAngles.y, Mathf.Lerp(tr.eulerAngles.z, 0, Time.deltaTime * 10f));
 
-                // Slow down when not moving
                 rb.linearVelocity = new Vector3(rb.linearVelocity.x * 0.95f, rb.linearVelocity.y, rb.linearVelocity.z * 0.95f);
             }
 
-            // Jump with ground check
             if ((UnityInput.Current.GetKeyDown(KeyCode.Space) || Inputs.RightPrimary) && IsGroundedPC())
             {
                 rb.linearVelocity = new Vector3(rb.linearVelocity.x, 0, rb.linearVelocity.z);
                 rb.AddForce(Vector3.up * 12f, ForceMode.Impulse);
 
-                // Jump animation - arms throw up
                 GTPlayer.Instance.rightHand.controllerTransform.position += Vector3.up * 0.3f;
                 GTPlayer.Instance.leftHand.controllerTransform.position += Vector3.up * 0.3f;
             }
 
-            // Gravity for when not grounded
             if (!IsGroundedPC())
             {
                 rb.linearVelocity += Vector3.down * 9.81f * Time.deltaTime;

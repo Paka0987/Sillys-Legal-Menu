@@ -12,7 +12,6 @@ using UnityEngine;
 using UnityEngine.XR;
 using System.Threading;
 using Hashtable = ExitGames.Client.Photon.Hashtable;
-using static Juul.Serialize2;
 
 namespace Juul
 {
@@ -50,7 +49,7 @@ namespace Juul
             Vector3 startPos = VRRig.LocalRig.transform.position;
             VRRig.LocalRig.transform.position = Rigs.GetVRRigFromNetPlayer(Target).transform.position;
 
-            Serialize(GorillaTagger.Instance.myVRRig.GetView, new RaiseEventOptions { TargetActors = new[] { PhotonNetwork.MasterClient.ActorNumber } });
+            Serialize.Serialize2(GorillaTagger.Instance.myVRRig.GetView, new RaiseEventOptions { TargetActors = new[] { PhotonNetwork.MasterClient.ActorNumber } });
             GameMode.ReportTag(Target);
 
             VRRig.LocalRig.transform.position = startPos;
@@ -84,12 +83,12 @@ namespace Juul
             foreach (var vrrig in rigs)
             {
                 VRRig.LocalRig.transform.position = vrrig.transform.position;
-                Serialize(GorillaTagger.Instance.myVRRig.GetView, new RaiseEventOptions { TargetActors = new[] { PhotonNetwork.MasterClient.ActorNumber } });
+                Serialize.Serialize2(GorillaTagger.Instance.myVRRig.GetView, new RaiseEventOptions { TargetActors = new[] { PhotonNetwork.MasterClient.ActorNumber } });
                 GameMode.ReportTag(Rigs.GetPlayerFromVRRig1(vrrig));
             }
 
             VRRig.LocalRig.transform.position = startPos;
-            Serialize(GorillaTagger.Instance.myVRRig.GetView, new RaiseEventOptions { TargetActors = new[] { PhotonNetwork.MasterClient.ActorNumber } });
+            Serialize.Serialize2(GorillaTagger.Instance.myVRRig.GetView, new RaiseEventOptions { TargetActors = new[] { PhotonNetwork.MasterClient.ActorNumber } });
         }
 
         public static void FixRig()
@@ -118,7 +117,7 @@ namespace Juul
 
             tagger.offlineVRRig.enabled = false;
             tagger.offlineVRRig.transform.position = infectedPlayer.rightHandTransform.position;
-            Serialize(tagger.myVRRig.GetView, new RaiseEventOptions { Receivers = ReceiverGroup.Others });
+            Serialize.Serialize2(tagger.myVRRig.GetView, new RaiseEventOptions { Receivers = ReceiverGroup.Others });
         }
 
         public static void TagArua()

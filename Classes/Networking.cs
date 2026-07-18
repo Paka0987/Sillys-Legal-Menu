@@ -80,56 +80,78 @@ namespace Juul
             return enabled.Count == 0 ? "" : string.Join("|", enabled.ToArray());
         }
 
+        private static Hashtable lastSyncedProps = new Hashtable();
+
         public static void SyncProperties()
         {
             if (!IsNetworkingEnabled || !PhotonNetwork.IsConnected || PhotonNetwork.LocalPlayer == null) return;
 
-            string category = Core.ActiveCategory != null ? Core.ActiveCategory.Name : "Home";
-            if (category.Length > 20) category = category.Substring(0, 20);
-
-            Hashtable props = new Hashtable();
-            props["Juul_V"] = Plugin.version;
-            props["Juul_T"] = Core.ThemeValue;
-            props["Juul_P"] = category;
-            props["Juul_O"] = Core.IsMenuOpen;
-            props["Juul_H"] = Core.IsRightHanded;
-            props["Juul_R"] = Core.IsRounded;
-            props["Juul_CL"] = Core.IsCatLeft;
-            props["Juul_CR"] = Core.IsCatRotated;
-            props["Juul_MW"] = Core.MenuWidth;
-            props["Juul_BI"] = Core.BtnInset;
-            props["Juul_TS"] = Core.TextSize;
-            props["Juul_VR"] = UnityEngine.XR.XRSettings.isDeviceActive;
-            props["Juul_SRCH"] = SearchManager.IsSearching;
-            props["Juul_SRCHQ"] = SearchManager.IsSearching ? SearchManager.SearchQuery : "";
-            props["Juul_CATPG"] = Core.CurrentCatPage;
-            props["Juul_PG"] = Core.CurrentPage;
-            props["Juul_PGV"] = Core.PageBtnVer;
-
-            string buttonStates = GetButtonStates();
-            if (buttonStates != lastButtonStatesHash)
+            try
             {
-                props["Juul_BTN"] = buttonStates;
-                lastButtonStatesHash = buttonStates;
+                string category = Core.ActiveCategory != null ? Core.ActiveCategory.Name : "Home";
+                if (category.Length > 20) category = category.Substring(0, 20);
+
+                Hashtable currentProps = new Hashtable();
+                currentProps["Juul_V"] = Plugin.version;
+                currentProps["Juul_T"] = Core.ThemeValue;
+                currentProps["Juul_P"] = category;
+                currentProps["Juul_O"] = Core.IsMenuOpen;
+                currentProps["Juul_H"] = Core.IsRightHanded;
+                currentProps["Juul_R"] = Core.IsRounded;
+                currentProps["Juul_CL"] = Core.IsCatLeft;
+                currentProps["Juul_CR"] = Core.IsCatRotated;
+                currentProps["Juul_MW"] = Core.MenuWidth;
+                currentProps["Juul_BI"] = Core.BtnInset;
+                currentProps["Juul_TS"] = Core.TextSize;
+                currentProps["Juul_VR"] = UnityEngine.XR.XRSettings.isDeviceActive;
+                currentProps["Juul_SRCH"] = SearchManager.IsSearching;
+                currentProps["Juul_SRCHQ"] = SearchManager.IsSearching ? SearchManager.SearchQuery : "";
+                currentProps["Juul_CATPG"] = Core.CurrentCatPage;
+                currentProps["Juul_PG"] = Core.CurrentPage;
+                currentProps["Juul_PGV"] = Core.PageBtnVer;
+
+                string buttonStates = GetButtonStates();
+                currentProps["Juul_BTN"] = buttonStates;
+
+                currentProps["Juul_CATS"] = GetCategories();
+                currentProps["Juul_PBTNS"] = GetCurrentPageButtons();
+
+                bool kbVisible = KeyboardManager.KeyboardObj != null && !KeyboardManager.KeyboardObj.Equals(null);
+                currentProps["Juul_KB"] = kbVisible;
+                string kbQuery = "";
+                if (kbVisible)
+                {
+                    if (KeyboardManager.IsSavingPreset) kbQuery = KeyboardManager.PresetSaveQuery ?? "";
+                    else if (KeyboardManager.IsJoiningRoom) kbQuery = KeyboardManager.JoinRoomQuery ?? "";
+                    else if (KeyboardManager.IsSettingName) kbQuery = KeyboardManager.NameQuery ?? "";
+                    else kbQuery = SearchManager.SearchQuery ?? "";
+                    if (kbQuery.Length > 64) kbQuery = kbQuery.Substring(0, 64);
+                }
+                currentProps["Juul_KBQ"] = kbQuery;
+
+                Hashtable propsToSync = new Hashtable();
+                foreach (System.Collections.DictionaryEntry entry in currentProps)
+                {
+                    if (!lastSyncedProps.ContainsKey(entry.Key) || (lastSyncedProps[entry.Key] == null && entry.Value != null) || (lastSyncedProps[entry.Key] != null && !lastSyncedProps[entry.Key].Equals(entry.Value)))
+                    {
+                        propsToSync[entry.Key] = entry.Value;
+                        lastSyncedProps[entry.Key] = entry.Value;
+                    }
+                }
+
+                if (propsToSync.Count > 0)
+                {
+                    bool success = PhotonNetwork.LocalPlayer.SetCustomProperties(propsToSync);
+                    if (!success)
+                    {
+                        lastSyncedProps.Clear();
+                    }
+                }
             }
-
-            props["Juul_CATS"] = GetCategories();
-            props["Juul_PBTNS"] = GetCurrentPageButtons();
-
-            bool kbVisible = KeyboardManager.KeyboardObj != null && !KeyboardManager.KeyboardObj.Equals(null);
-            props["Juul_KB"] = kbVisible;
-            string kbQuery = "";
-            if (kbVisible)
+            catch
             {
-                if (KeyboardManager.IsSavingPreset) kbQuery = KeyboardManager.PresetSaveQuery ?? "";
-                else if (KeyboardManager.IsJoiningRoom) kbQuery = KeyboardManager.JoinRoomQuery ?? "";
-                else if (KeyboardManager.IsSettingName) kbQuery = KeyboardManager.NameQuery ?? "";
-                else kbQuery = SearchManager.SearchQuery ?? "";
-                if (kbQuery.Length > 64) kbQuery = kbQuery.Substring(0, 64);
+                lastSyncedProps.Clear();
             }
-            props["Juul_KBQ"] = kbQuery;
-
-            PhotonNetwork.LocalPlayer.SetCustomProperties(props);
         }
 
         private static string GetCategories()
@@ -219,8 +241,13 @@ namespace Juul
             if (player == null || !player.CustomProperties.ContainsKey("Juul_V"))
                 return false;
 
+            string version = player.CustomProperties["Juul_V"] as string;
+            if (string.IsNullOrEmpty(version) || !version.StartsWith("4."))
+                return false;
+
             if (!player.CustomProperties.ContainsKey("Juul_O") || 
-                !player.CustomProperties.ContainsKey("Juul_T"))
+                !player.CustomProperties.ContainsKey("Juul_T") ||
+                !player.CustomProperties.ContainsKey("Juul_H"))
                 return false;
 
             return true;
@@ -276,7 +303,7 @@ namespace Juul
             List<Player> toRemove = new List<Player>();
             foreach (var kvp in networkMenus)
             {
-                if (!currentPlayers.Contains(kvp.Key))
+                if (!currentPlayers.Contains(kvp.Key) || !IsNetworkingEnabled)
                     toRemove.Add(kvp.Key);
             }
             foreach (Player p in toRemove)
@@ -478,7 +505,7 @@ namespace Juul
         private Color lastColor2;
         private bool needsUpdate = true;
         private float updateTimer = 0f;
-        private const float updateInterval = 0.033f;
+        private const float updateInterval = 0.2f;
         private bool initialized = false;
         private bool isCylinder = false;
 
@@ -1269,121 +1296,58 @@ namespace Juul
                 }
             }
 
-            if (isVR)
+            if (isVR && kbVisible)
+            {
+                if (rig.head != null && rig.head.rigTarget != null)
+                {
+                    if (!wasKbVisible)
+                    {
+                        Transform head = rig.head.rigTarget.transform;
+                        Vector3 flatForward = head.forward;
+                        flatForward.y = 0f;
+                        flatForward.Normalize();
+                        kbFixedPosition = head.position + flatForward * 0.8f;
+                        kbFixedRotation = Quaternion.LookRotation(head.position - kbFixedPosition) * Quaternion.Euler(-90f, 0f, -90f);
+                        wasKbVisible = true;
+                    }
+                    menuRoot.transform.position = kbFixedPosition;
+                    menuRoot.transform.rotation = kbFixedRotation;
+                }
+            }
+            else if (isVR)
             {
                 Transform hand = isRightHanded ? rig.rightHandTransform : rig.leftHandTransform;
-                if (hand != null && rig.head != null && rig.head.rigTarget != null)
+                if (hand != null && GorillaTagger.Instance != null && GorillaTagger.Instance.offlineVRRig != null)
                 {
-                    if (kbVisible)
+                    Transform localController = isRightHanded ? GorillaTagger.Instance.rightHandTransform : GorillaTagger.Instance.leftHandTransform;
+                    Transform localWrist = isRightHanded ? GorillaTagger.Instance.offlineVRRig.rightHandTransform : GorillaTagger.Instance.offlineVRRig.leftHandTransform;
+
+                    if (localController != null && localWrist != null)
                     {
-                        if (!wasKbVisible)
-                        {
-                            Transform head = rig.head.rigTarget.transform;
-                            kbFixedPosition = head.position + head.forward * 0.8f;
-                            kbFixedRotation = Quaternion.LookRotation(head.position - kbFixedPosition) * Quaternion.Euler(-90f, 0f, -90f);
-                            kbAnimStartPos = menuRoot.transform.position;
-                            kbAnimStartRot = menuRoot.transform.rotation;
-                            isAnimatingToKb = true;
-                            kbAnimationProgress = 0f;
-                            wasKbVisible = true;
-                        }
+                        Vector3 localOffset = localWrist.InverseTransformPoint(localController.position);
+                        Quaternion localRotOffset = Quaternion.Inverse(localWrist.rotation) * localController.rotation;
+                        Vector3 targetPos = hand.TransformPoint(localOffset);
+                        Quaternion targetRot = hand.rotation * localRotOffset * (isRightHanded ? Quaternion.Euler(180f, 180f, 0f) : Quaternion.identity);
 
-                        if (isAnimatingToKb)
-                        {
-                            kbAnimationProgress += Time.deltaTime * 3f;
-                            if (kbAnimationProgress >= 1f)
-                            {
-                                kbAnimationProgress = 1f;
-                                isAnimatingToKb = false;
-                            }
-                            float t = kbAnimationProgress < 0.5f 
-                                ? 2f * kbAnimationProgress * kbAnimationProgress 
-                                : 1f - Mathf.Pow(-2f * kbAnimationProgress + 2f, 2f) / 2f;
-                            menuRoot.transform.position = Vector3.Lerp(kbAnimStartPos, kbFixedPosition, t);
-                            menuRoot.transform.rotation = Quaternion.Lerp(kbAnimStartRot, kbFixedRotation, t);
-                        }
-                        else
-                        {
-                            menuRoot.transform.position = kbFixedPosition;
-                            menuRoot.transform.rotation = kbFixedRotation;
-                        }
-                    }
-                    else
-                    {
-                        if (wasKbVisible)
-                        {
-                            Transform localController = isRightHanded ? GorillaTagger.Instance.rightHandTransform : GorillaTagger.Instance.leftHandTransform;
-                            Transform localWrist = isRightHanded ? GorillaTagger.Instance.offlineVRRig.rightHandTransform : GorillaTagger.Instance.offlineVRRig.leftHandTransform;
-
-                            Vector3 localOffset = localWrist.InverseTransformPoint(localController.position);
-                            Quaternion localRotOffset = Quaternion.Inverse(localWrist.rotation) * localController.rotation;
-
-                            Vector3 handPos = hand.TransformPoint(localOffset);
-                            Quaternion handRot = hand.rotation * localRotOffset * (isRightHanded ? Quaternion.Euler(180f, 180f, 0f) : Quaternion.identity);
-
-                            kbAnimStartPos = menuRoot.transform.position;
-                            kbAnimStartRot = menuRoot.transform.rotation;
-                            kbFixedPosition = handPos;
-                            kbFixedRotation = handRot;
-                            isAnimatingToKb = true;
-                            kbAnimationProgress = 0f;
-                            wasKbVisible = false;
-                        }
-
-                        if (isAnimatingToKb)
-                        {
-                            Transform localController = isRightHanded ? GorillaTagger.Instance.rightHandTransform : GorillaTagger.Instance.leftHandTransform;
-                            Transform localWrist = isRightHanded ? GorillaTagger.Instance.offlineVRRig.rightHandTransform : GorillaTagger.Instance.offlineVRRig.leftHandTransform;
-
-                            Vector3 localOffset = localWrist.InverseTransformPoint(localController.position);
-                            Quaternion localRotOffset = Quaternion.Inverse(localWrist.rotation) * localController.rotation;
-
-                            Vector3 handPos = hand.TransformPoint(localOffset);
-                            Quaternion handRot = hand.rotation * localRotOffset * (isRightHanded ? Quaternion.Euler(180f, 180f, 0f) : Quaternion.identity);
-
-                            kbFixedPosition = handPos;
-                            kbFixedRotation = handRot;
-
-                            kbAnimationProgress += Time.deltaTime * 3f;
-                            if (kbAnimationProgress >= 1f)
-                            {
-                                kbAnimationProgress = 1f;
-                                isAnimatingToKb = false;
-                            }
-                            float t = kbAnimationProgress < 0.5f 
-                                ? 2f * kbAnimationProgress * kbAnimationProgress 
-                                : 1f - Mathf.Pow(-2f * kbAnimationProgress + 2f, 2f) / 2f;
-                            menuRoot.transform.position = Vector3.Lerp(kbAnimStartPos, kbFixedPosition, t);
-                            menuRoot.transform.rotation = Quaternion.Lerp(kbAnimStartRot, kbFixedRotation, t);
-                        }
-                        else
-                        {
-                            Transform localController = isRightHanded ? GorillaTagger.Instance.rightHandTransform : GorillaTagger.Instance.leftHandTransform;
-                            Transform localWrist = isRightHanded ? GorillaTagger.Instance.offlineVRRig.rightHandTransform : GorillaTagger.Instance.offlineVRRig.leftHandTransform;
-
-                            Vector3 localOffset = localWrist.InverseTransformPoint(localController.position);
-                            Quaternion localRotOffset = Quaternion.Inverse(localWrist.rotation) * localController.rotation;
-
-                            Vector3 handPos = hand.TransformPoint(localOffset);
-                            Quaternion handRot = hand.rotation * localRotOffset * (isRightHanded ? Quaternion.Euler(180f, 180f, 0f) : Quaternion.identity);
-
-                            menuRoot.transform.position = Vector3.Lerp(menuRoot.transform.position, handPos, Time.deltaTime * Core.MenuSmoothingSpeed);
-                            menuRoot.transform.rotation = Quaternion.Lerp(menuRoot.transform.rotation, handRot, Time.deltaTime * Core.MenuSmoothingSpeed);
-                        }
+                        menuRoot.transform.position = Vector3.Lerp(menuRoot.transform.position, targetPos, Time.deltaTime * Core.MenuSmoothingSpeed);
+                        menuRoot.transform.rotation = Quaternion.Lerp(menuRoot.transform.rotation, targetRot, Time.deltaTime * Core.MenuSmoothingSpeed);
                     }
                 }
+                wasKbVisible = false;
             }
             else
             {
                 if (rig.head != null && rig.head.rigTarget != null)
                 {
                     Transform head = rig.head.rigTarget.transform;
-                    Vector3 targetPos = head.position + head.forward * 0.6f;
+                    float dist = kbVisible ? 1.0f : 0.6f;
+                    Vector3 targetPos = head.position + head.forward * dist;
                     Quaternion targetRot = Quaternion.LookRotation(head.position - targetPos) * Quaternion.Euler(-90f, 0f, -90f);
 
                     menuRoot.transform.position = Vector3.Lerp(menuRoot.transform.position, targetPos, Time.deltaTime * Core.MenuSmoothingSpeed);
                     menuRoot.transform.rotation = Quaternion.Lerp(menuRoot.transform.rotation, targetRot, Time.deltaTime * Core.MenuSmoothingSpeed);
                 }
+                wasKbVisible = false;
             }
 
             if (player.CustomProperties.ContainsKey("Juul_T"))

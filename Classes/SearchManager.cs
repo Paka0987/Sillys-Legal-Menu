@@ -23,20 +23,33 @@ namespace Juul
                 {
                     if (module == ExtraButtons.EnabledCategory) continue;
                     if (module == PlayerMenu.GetPlayersCategory()) continue;
-                    if (module.Buttons != null)
-                    {
-                        foreach (Button b in module.Buttons)
-                        {
-                            if (b.Name.ToLower().Contains(query))
-                            {
-                                searchCat.Buttons.Add(b);
-                            }
-                        }
-                    }
+                    SearchInCategory(module, query, searchCat);
                 }
             }
             Core.ActiveCategory = searchCat;
             Core.CurrentPage = 0;
+        }
+
+        private static void SearchInCategory(Category category, string query, Category results)
+        {
+            if (category.Buttons != null)
+            {
+                foreach (Button b in category.Buttons)
+                {
+                    if (b.Name.ToLower().Contains(query))
+                    {
+                        results.Buttons.Add(b);
+                    }
+                }
+            }
+
+            if (category.Subcategories != null)
+            {
+                foreach (Category subcat in category.Subcategories)
+                {
+                    SearchInCategory(subcat, query, results);
+                }
+            }
         }
     }
 }

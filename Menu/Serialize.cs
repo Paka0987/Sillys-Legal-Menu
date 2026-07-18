@@ -9,9 +9,9 @@ using UnityEngine;
 
 namespace Juul
 {
-    internal class Serialize2
+    internal class Serialize
     {
-        public static void Serialize(PhotonView pv, RaiseEventOptions options = null, int timeOffset = 0, float delay = 0f)
+        public static void Serialize2(PhotonView pv, RaiseEventOptions options = null, int timeOffset = 0, float delay = 0f)
         {
             if (!PhotonNetwork.InRoom || pv == null)
                 return;
@@ -48,7 +48,6 @@ namespace Juul
                     PhotonNetwork.NetworkingClient.OpRaiseEvent(eventCode, updateData, finalOptions, sendOptions), delay));
             viewBatch.Clear();
         }
-
         public static IEnumerator SerializeDelay(Action action, float delay)
         {
             yield return new WaitForSeconds(delay);

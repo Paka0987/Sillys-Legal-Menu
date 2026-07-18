@@ -29,10 +29,22 @@ namespace Juul
 {
     internal class Fun
     {
+        private static GameObject cachedBug;
+        public static GameObject CachedBug { get { if (cachedBug == null) cachedBug = GameObject.Find("Floating Bug Holdable"); return cachedBug; } }
+
+        private static GameObject cachedBat;
+        public static GameObject CachedBat { get { if (cachedBat == null) cachedBat = GameObject.Find("Cave Bat Holdable"); return cachedBat; } }
+
+        private static GameObject cachedFirefly;
+        public static GameObject CachedFirefly { get { if (cachedFirefly == null) cachedFirefly = GameObject.Find("Firefly"); return cachedFirefly; } }
 
         private static Hashtable rpcFilterByViewId = new Hashtable();
+        private static float lastRpcFlushTime = 0f;
         public static void FlushRPCS()
         {
+            if (Time.time - lastRpcFlushTime < 0.05f) return;
+            lastRpcFlushTime = Time.time;
+            
             rpcFilterByViewId[0] = GorillaTagger.Instance.myVRRig.ViewID;
             RaiseEventOptions raiseEventOptions = new RaiseEventOptions
             {
@@ -453,14 +465,14 @@ namespace Juul
         {
             if (Inputs.RightGrip)
             {
-                GameObject targetObject = GameObject.Find("Floating Bug Holdable");
+                GameObject targetObject = CachedBug;
                 Vector3 handPos = GTPlayer.Instance.rightHand.controllerTransform.position;
                 targetObject.transform.position = handPos;
                 targetObject.transform.SetParent(GTPlayer.Instance.rightHand.controllerTransform);
             }
             if (Inputs.LeftGrip)
             {
-                GameObject targetObject2 = GameObject.Find("Floating Bug Holdable");
+                GameObject targetObject2 = CachedBug;
                 Vector3 handPos2 = GTPlayer.Instance.leftHand.controllerTransform.position;
                 targetObject2.transform.position = handPos2;
                 targetObject2.transform.SetParent(GTPlayer.Instance.leftHand.controllerTransform);
@@ -470,14 +482,14 @@ namespace Juul
         {
             if (Inputs.RightGrip)
             {
-                GameObject targetObject = GameObject.Find("Cave Bat Holdable");
+                GameObject targetObject = CachedBat;
                 Vector3 handPos = GTPlayer.Instance.rightHand.controllerTransform.position;
                 targetObject.transform.position = handPos;
                 targetObject.transform.SetParent(GTPlayer.Instance.rightHand.controllerTransform);
             }
             if (Inputs.LeftGrip)
             {
-                GameObject targetObject2 = GameObject.Find("Cave Bat Holdable");
+                GameObject targetObject2 = CachedBat;
                 Vector3 handPos2 = GTPlayer.Instance.leftHand.controllerTransform.position;
                 targetObject2.transform.position = handPos2;
                 targetObject2.transform.SetParent(GTPlayer.Instance.leftHand.controllerTransform);
@@ -487,14 +499,14 @@ namespace Juul
         {
             if (Inputs.RightGrip)
             {
-                GameObject targetObject = GameObject.Find("Firefly");
+                GameObject targetObject = CachedFirefly;
                 Vector3 handPos = GTPlayer.Instance.rightHand.controllerTransform.position;
                 targetObject.transform.position = handPos;
                 targetObject.transform.SetParent(GTPlayer.Instance.rightHand.controllerTransform);
             }
             if (Inputs.LeftGrip)
             {
-                GameObject targetObject2 = GameObject.Find("Firefly");
+                GameObject targetObject2 = CachedFirefly;
                 Vector3 handPos2 = GTPlayer.Instance.leftHand.controllerTransform.position;
                 targetObject2.transform.position = handPos2;
                 targetObject2.transform.SetParent(GTPlayer.Instance.leftHand.controllerTransform);
@@ -527,7 +539,7 @@ namespace Juul
         }*/
         public static void OrbitBug()
         {
-            GameObject targetObject = GameObject.Find("Floating Bug Holdable");
+            GameObject targetObject = CachedBug;
             float angle = Time.time * 15f;
             Vector3 orbitPos = GTPlayer.Instance.transform.position +
             new Vector3(Mathf.Cos(angle) * 1.5f, 0.5f, Mathf.Sin(angle) * 1.5f);
@@ -536,7 +548,7 @@ namespace Juul
         }
         public static void OrbitBat()
         {
-            GameObject targetObject = GameObject.Find("Cave Bat Holdable");
+            GameObject targetObject = CachedBat;
             float angle = Time.time * 15f;
             Vector3 orbitPos = GTPlayer.Instance.transform.position +
             new Vector3(Mathf.Cos(angle) * 1.5f, 0.5f, Mathf.Sin(angle) * 1.5f);
@@ -545,7 +557,7 @@ namespace Juul
         }
         public static void OrbitFirefly()
         {
-            GameObject targetObject = GameObject.Find("Firefly");
+            GameObject targetObject = CachedFirefly;
             float angle = Time.time * 15f;
             Vector3 orbitPos = GTPlayer.Instance.transform.position +
             new Vector3(Mathf.Cos(angle) * 1.5f, 0.5f, Mathf.Sin(angle) * 1.5f);
@@ -567,7 +579,7 @@ namespace Juul
         }*/
         public static void SpazBug()
         {
-            GameObject targetObject = GameObject.Find("Floating Bug Holdable");
+            GameObject targetObject = CachedBug;
             Vector3 spazPos = GTPlayer.Instance.transform.position + Vector3.up +
             new Vector3(
                 Mathf.Sin(Time.time * 20f) * 1f,
@@ -583,7 +595,7 @@ namespace Juul
         }
         public static void SpazBat()
         {
-            GameObject targetObject = GameObject.Find("Cave Bat Holdable");
+            GameObject targetObject = CachedBat;
             Vector3 spazPos = GTPlayer.Instance.transform.position + Vector3.up +
             new Vector3(
                 Mathf.Sin(Time.time * 20f) * 1f,
@@ -599,7 +611,7 @@ namespace Juul
         }
         public static void SpazFirefly()
         {
-            GameObject targetObject = GameObject.Find("Firefly");
+            GameObject targetObject = CachedFirefly;
             Vector3 spazPos = GTPlayer.Instance.transform.position + Vector3.up +
             new Vector3(
                 Mathf.Sin(Time.time * 20f) * 1f,
@@ -635,17 +647,17 @@ namespace Juul
         }*/
         public static void DestroyBug()
         {
-            GameObject targetObject = GameObject.Find("Floating Bug Holdable");
+            GameObject targetObject = CachedBug;
             targetObject.transform.position = new Vector3(999f, 999f, 999f);
         }
         public static void DestroyBat()
         {
-            GameObject targetObject = GameObject.Find("Cave Bat Holdable");
+            GameObject targetObject = CachedBat;
             targetObject.transform.position = new Vector3(999f, 999f, 999f);
         }
         public static void DestroyFirefly()
         {
-            GameObject targetObject = GameObject.Find("Firefly");
+            GameObject targetObject = CachedFirefly;
             targetObject.transform.position = new Vector3(999f, 999f, 999f);
         }
         /*public static void DestroyCamera()

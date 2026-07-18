@@ -13,7 +13,7 @@ namespace Juul
         public static Plugin Instance { get; private set; }
         public const string guid = "Juul";
         public const string title = "Juul";
-        public const string version = "4.0.0";
+        public const string version = "4.5.0";
         private GameObject coreObject;
 
         void Awake()

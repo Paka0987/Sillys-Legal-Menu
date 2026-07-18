@@ -55,6 +55,9 @@ namespace Juul
         private static Dictionary<VRRig, Material> originalMaterials = new Dictionary<VRRig, Material>();
         private static Dictionary<VRRig, Color> originalColors = new Dictionary<VRRig, Color>();
 
+        private static HashSet<VRRig> activeRigs = new HashSet<VRRig>();
+        private static List<VRRig> rigsToRemove = new List<VRRig>();
+
         public static bool AdvancedNametags = false;
 
         private const float width = 0.015f;
@@ -94,7 +97,7 @@ namespace Juul
                 return;
 
             VRRig[] currentRigs = Core.CachedActiveRigs;
-            HashSet<VRRig> activeRigs = new HashSet<VRRig>();
+            activeRigs.Clear();
 
             foreach (VRRig rig in currentRigs)
             {
@@ -202,7 +205,7 @@ namespace Juul
 
         private static void CleanupDisconnectedBones(HashSet<VRRig> activeRigs)
         {
-            List<VRRig> rigsToRemove = new List<VRRig>();
+            rigsToRemove.Clear();
 
             foreach (var kvp in rigLineCache)
             {
@@ -262,7 +265,7 @@ namespace Juul
 
             Vector3 handPosition = localRig.rightHandTransform.position;
             VRRig[] currentRigs = Core.CachedActiveRigs;
-            HashSet<VRRig> activeRigs = new HashSet<VRRig>();
+            activeRigs.Clear();
 
             foreach (VRRig rig in currentRigs)
             {
@@ -315,7 +318,7 @@ namespace Juul
 
         private static void CleanupDisconnectedTracers(HashSet<VRRig> activeRigs)
         {
-            List<VRRig> rigsToRemove = new List<VRRig>();
+            rigsToRemove.Clear();
 
             foreach (var kvp in tracerLineCache)
             {
@@ -364,7 +367,7 @@ namespace Juul
                 return;
 
             VRRig[] currentRigs = Core.CachedActiveRigs;
-            HashSet<VRRig> activeRigs = new HashSet<VRRig>();
+            activeRigs.Clear();
 
             foreach (VRRig rig in currentRigs)
             {
@@ -484,7 +487,7 @@ namespace Juul
 
         private static void CleanupDisconnected2DBoxes(HashSet<VRRig> activeRigs)
         {
-            List<VRRig> rigsToRemove = new List<VRRig>();
+            rigsToRemove.Clear();
 
             foreach (var kvp in box2DLineCache)
             {
@@ -533,7 +536,7 @@ namespace Juul
                 return;
 
             VRRig[] currentRigs = Core.CachedActiveRigs;
-            HashSet<VRRig> activeRigs = new HashSet<VRRig>();
+            activeRigs.Clear();
 
             foreach (VRRig rig in currentRigs)
             {
@@ -680,7 +683,7 @@ namespace Juul
 
         private static void CleanupDisconnected3DBoxes(HashSet<VRRig> activeRigs)
         {
-            List<VRRig> rigsToRemove = new List<VRRig>();
+            rigsToRemove.Clear();
 
             foreach (var kvp in box3DLineCache)
             {
@@ -778,7 +781,7 @@ namespace Juul
                 return;
 
             VRRig[] currentRigs = Core.CachedActiveRigs;
-            HashSet<VRRig> activeRigs = new HashSet<VRRig>();
+            activeRigs.Clear();
 
             foreach (VRRig rig in currentRigs)
             {
@@ -951,7 +954,7 @@ namespace Juul
 
         private static void CleanupNameCanvases(HashSet<VRRig> activeRigs)
         {
-            List<VRRig> rigsToRemove = new List<VRRig>();
+            rigsToRemove.Clear();
 
             foreach (var kvp in playernamecache)
             {
@@ -1238,6 +1241,27 @@ namespace Juul
             private const float margin = 8f;
             private const float gap = 3f;
 
+            private void CollectEnabledButtons(Category category)
+            {
+                if (category == ExtraButtons.EnabledCategory) return;
+                if (category == PlayerMenu.GetPlayersCategory()) return;
+                
+                foreach (var btn in category.Buttons)
+                {
+                    if (btn != null && btn.Enabled && btn.Toggle && !btn.Incremental && !btn.Label)
+                    {
+                        if (btn.Name.Contains("Array List") || btn.Name.Contains("Watermark")) continue;
+                        enabledMods.Add(btn);
+                    }
+                }
+                
+                // Recursively check subcategories
+                foreach (var subCategory in category.Subcategories)
+                {
+                    CollectEnabledButtons(subCategory);
+                }
+            }
+
             private void OnGUI()
             {
                 if (Event.current.type != EventType.Repaint) return;
@@ -1265,16 +1289,7 @@ namespace Juul
                 enabledMods.Clear();
                 foreach (var category in Buttons.Modules)
                 {
-                    if (category == ExtraButtons.EnabledCategory) continue;
-                    if (category == PlayerMenu.GetPlayersCategory()) continue;
-                    foreach (var btn in category.Buttons)
-                    {
-                        if (btn != null && btn.Enabled && btn.Toggle && !btn.Incremental && !btn.Label)
-                        {
-                            if (btn.Name.Contains("Array List") || btn.Name.Contains("Watermark")) continue;
-                            enabledMods.Add(btn);
-                        }
-                    }
+                    CollectEnabledButtons(category);
                 }
                 enabledMods.Sort((a, b) => b.Name.Length.CompareTo(a.Name.Length));
                 float screenWidth = Screen.width;
@@ -1301,10 +1316,19 @@ namespace Juul
                 }
             }
         }
+        private static MaterialPropertyBlock outcastBlock;
         public static void OutcastAll()
         {
+            if (outcastBlock == null) outcastBlock = new MaterialPropertyBlock();
             Color c = Color.HSVToRGB(Time.time % 1, 1, 1);
-            VRRigCache.ActiveRigs.ForEach(v => { if (v && v != VRRig.LocalRig) v.mainSkin.material.color = c; });
+            VRRigCache.ActiveRigs.ForEach(v => { 
+                if (v && v != VRRig.LocalRig && v.mainSkin != null) 
+                {
+                    v.mainSkin.GetPropertyBlock(outcastBlock);
+                    outcastBlock.SetColor("_Color", c);
+                    v.mainSkin.SetPropertyBlock(outcastBlock);
+                }
+            });
         }
 
         public static void PlayerInfo2()
@@ -1341,19 +1365,29 @@ namespace Juul
         {
             BetterDayNightManager.instance.SetTimeOfDay(3);
         }
+        private static GameObject drawTrail;
         public static void Draw()
         {
             Transform hand = ControllerInputPoller.instance.rightGrab ? GorillaTagger.Instance.rightHandTransform : ControllerInputPoller.instance.leftGrab ? GorillaTagger.Instance.leftHandTransform : null;
             if (hand != null)
             {
-                var line = new GameObject("Trail").AddComponent<LineRenderer>();
-                line.material = new Material(Shader.Find("Sprites/Default"));
-                line.startColor = line.endColor = Color.purple;
-                line.startWidth = line.endWidth = 0.02f;
-                line.positionCount = 2;
-                line.SetPositions(new Vector3[] { hand.position, hand.position });
-                GameObject.Destroy(line.material, 0.5f);
-                GameObject.Destroy(line.gameObject, 0.5f);
+                if (drawTrail == null)
+                {
+                    drawTrail = new GameObject("Trail");
+                    TrailRenderer trail = drawTrail.AddComponent<TrailRenderer>();
+                    trail.material = new Material(Shader.Find("Sprites/Default"));
+                    trail.startColor = Color.purple;
+                    trail.endColor = Color.purple;
+                    trail.startWidth = 0.02f;
+                    trail.endWidth = 0.02f;
+                    trail.time = 0.5f;
+                }
+                drawTrail.transform.position = hand.position;
+            }
+            else if (drawTrail != null)
+            {
+                GameObject.Destroy(drawTrail);
+                drawTrail = null;
             }
         }
         public static void InfectionTracers()
@@ -1371,7 +1405,7 @@ namespace Juul
 
             Vector3 handPosition = localRig.rightHandTransform.position;
             VRRig[] currentRigs = Core.CachedActiveRigs;
-            HashSet<VRRig> activeRigs = new HashSet<VRRig>();
+            activeRigs.Clear();
 
             foreach (VRRig rig in currentRigs)
             {
@@ -1422,7 +1456,7 @@ namespace Juul
 
         private static void CleanupDisconnectedInfectionTracers(HashSet<VRRig> activeRigs)
         {
-            List<VRRig> rigsToRemove = new List<VRRig>();
+            rigsToRemove.Clear();
 
             foreach (var kvp in tracerLineCache)
             {
@@ -1795,7 +1829,7 @@ namespace Juul
                 return;
 
             VRRig[] currentRigs = Core.CachedActiveRigs;
-            HashSet<VRRig> activeRigs = new HashSet<VRRig>();
+            activeRigs.Clear();
 
             foreach (VRRig rig in currentRigs)
             {
@@ -1903,7 +1937,7 @@ namespace Juul
 
         private static void CleanupDisconnectedInfectionBones(HashSet<VRRig> activeRigs)
         {
-            List<VRRig> rigsToRemove = new List<VRRig>();
+            rigsToRemove.Clear();
 
             foreach (var kvp in rigLineCache)
             {
@@ -1961,7 +1995,7 @@ namespace Juul
             if (mainCamera == null) return;
 
             VRRig[] currentRigs = Core.CachedActiveRigs;
-            HashSet<VRRig> activeRigs = new HashSet<VRRig>();
+            activeRigs.Clear();
 
             foreach (VRRig rig in currentRigs)
             {
@@ -2061,7 +2095,7 @@ namespace Juul
 
         private static void CleanupDisconnected2DCornerBoxes(HashSet<VRRig> activeRigs)
         {
-            List<VRRig> rigsToRemove = new List<VRRig>();
+            rigsToRemove.Clear();
             foreach (var kvp in box2DCornerLineCache)
             {
                 if (!activeRigs.Contains(kvp.Key) || kvp.Key == null)
@@ -2088,7 +2122,7 @@ namespace Juul
             if (GorillaTagger.Instance == null) return;
 
             VRRig[] currentRigs = Core.CachedActiveRigs;
-            HashSet<VRRig> activeRigs = new HashSet<VRRig>();
+            activeRigs.Clear();
 
             foreach (VRRig rig in currentRigs)
             {
@@ -2232,7 +2266,7 @@ namespace Juul
 
         private static void CleanupDisconnected3DV2Boxes(HashSet<VRRig> activeRigs)
         {
-            List<VRRig> rigsToRemove = new List<VRRig>();
+            rigsToRemove.Clear();
             foreach (var kvp in box3DV2LineCache)
             {
                 if (!activeRigs.Contains(kvp.Key) || kvp.Key == null)
@@ -2372,7 +2406,7 @@ namespace Juul
                 return;
 
             VRRig[] currentRigs = Core.CachedActiveRigs;
-            HashSet<VRRig> activeRigs = new HashSet<VRRig>();
+            activeRigs.Clear();
 
             foreach (VRRig rig in currentRigs)
             {
@@ -2499,7 +2533,7 @@ namespace Juul
 
         private static void CleanupDisconnected3DStars(HashSet<VRRig> activeRigs)
         {
-            List<VRRig> rigsToRemove = new List<VRRig>();
+            rigsToRemove.Clear();
 
             foreach (var kvp in star3DLineCache)
             {
@@ -2540,7 +2574,7 @@ namespace Juul
                 return;
 
             VRRig[] currentRigs = Core.CachedActiveRigs;
-            HashSet<VRRig> activeRigs = new HashSet<VRRig>();
+            activeRigs.Clear();
 
             foreach (VRRig rig in currentRigs)
             {
@@ -2686,7 +2720,7 @@ namespace Juul
 
         private static void CleanupInactiveNametags(HashSet<VRRig> activeRigs)
         {
-            List<VRRig> rigsToRemove = new List<VRRig>();
+            rigsToRemove.Clear();
 
             foreach (var kvp in platformNametagCache)
             {
@@ -2746,7 +2780,6 @@ namespace Juul
         }
         public static void FPSBoost1()
         {
-            // Set ultra low resolution
             QualitySettings.SetQualityLevel(0, true);
             QualitySettings.antiAliasing = 0;
             QualitySettings.shadows = ShadowQuality.Disable;
@@ -2807,7 +2840,7 @@ namespace Juul
                 return;
 
             VRRig[] currentRigs = Core.CachedActiveRigs;
-            HashSet<VRRig> activeRigs = new HashSet<VRRig>();
+            activeRigs.Clear();
 
             foreach (VRRig rig in currentRigs)
             {
@@ -2914,7 +2947,7 @@ namespace Juul
 
         private static void CleanupDisconnected3DCircles(HashSet<VRRig> activeRigs)
         {
-            List<VRRig> rigsToRemove = new List<VRRig>();
+            rigsToRemove.Clear();
             foreach (var kvp in circle3DLineCache)
             {
                 if (!activeRigs.Contains(kvp.Key) || kvp.Key == null)

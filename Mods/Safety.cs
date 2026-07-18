@@ -289,6 +289,9 @@ namespace Juul
         }
 
         public static VRRig reportRig;
+        public static float antiReportRadius = 0.65f;
+        public static GameObject antiReportSphere;
+        
         public static void AntiReport(System.Action<VRRig, Vector3> onReport)
         {
             if (!NetworkSystem.Instance.InRoom) return;
@@ -305,9 +308,101 @@ namespace Juul
                 if (line.linePlayer != NetworkSystem.Instance.LocalPlayer) continue;
                 Transform report = line.reportButton.gameObject.transform;
 
-                foreach (var vrrig in from vrrig in VRRigCache.ActiveRigs where !vrrig.isLocal let D1 = Vector3.Distance(vrrig.rightHandTransform.position, report.position) let D2 = Vector3.Distance(vrrig.leftHandTransform.position, report.position) where D1 < 0.65f || D2 < 0.65f select vrrig)
+                foreach (var vrrig in from vrrig in VRRigCache.ActiveRigs where !vrrig.isLocal let D1 = Vector3.Distance(vrrig.rightHandTransform.position, report.position) let D2 = Vector3.Distance(vrrig.leftHandTransform.position, report.position) where D1 < antiReportRadius || D2 < antiReportRadius select vrrig)
                     onReport?.Invoke(vrrig, report.transform.position);
             }
+        }
+
+        public static void VisualizeAntiReportRadius()
+        {
+            if (!NetworkSystem.Instance.InRoom)
+            {
+                CleanupAntiReportVisualization();
+                return;
+            }
+
+            bool foundButton = false;
+            foreach (GorillaPlayerScoreboardLine line in GorillaScoreboardTotalUpdater.allScoreboardLines)
+            {
+                if (line == null || line.linePlayer != NetworkSystem.Instance.LocalPlayer) continue;
+                
+                if (line.reportButton == null || line.reportButton.gameObject == null)
+                {
+                    continue;
+                }
+                
+                Transform report = line.reportButton.gameObject.transform;
+                foundButton = true;
+
+                if (antiReportSphere == null)
+                {
+                    antiReportSphere = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                    Object.Destroy(antiReportSphere.GetComponent<Collider>());
+                    
+                    Renderer renderer = antiReportSphere.GetComponent<Renderer>();
+                    
+                    // Use GUI/Text Shader
+                    renderer.material.shader = Shader.Find("GUI/Text Shader");
+                    
+                    // Use menu theme color
+                    Color sphereColor = Core.BaseColor;
+                    sphereColor.a = 0.4f;
+                    renderer.material.color = sphereColor;
+                    
+                    antiReportSphere.layer = 0; // Default layer
+                    
+                    NotifiLib.SendNotification("<color=green>[SUCCESS]</color> Anti-Report visualization created!");
+                }
+                else
+                {
+                    // Update color with pulsing gradient using menu theme color
+                    Renderer renderer = antiReportSphere.GetComponent<Renderer>();
+                    if (renderer != null && renderer.material != null)
+                    {
+                        Color themeColor = Core.BaseColor;
+                        Color lightThemeColor = Color.Lerp(themeColor, Color.white, 0.5f);
+                        Color sphereColor = Color.Lerp(themeColor, lightThemeColor, Mathf.PingPong(Time.time * 0.8f, 1f));
+                        sphereColor.a = 0.4f;
+                        renderer.material.color = sphereColor;
+                    }
+                }
+
+                antiReportSphere.transform.position = report.position;
+                antiReportSphere.transform.localScale = Vector3.one * (antiReportRadius * 2f);
+                antiReportSphere.SetActive(true);
+                break; // Only need to update once per frame
+            }
+        }
+
+        public static void CleanupAntiReportVisualization()
+        {
+            if (antiReportSphere != null)
+            {
+                GameObject.Destroy(antiReportSphere);
+                antiReportSphere = null;
+            }
+        }
+
+        public static string GetAntiReportRadiusName()
+        {
+            return antiReportRadius.ToString("F2");
+        }
+
+        public static void ChangeAntiReportRadius(bool increase)
+        {
+            if (increase)
+            {
+                antiReportRadius += 0.05f;
+                if (antiReportRadius > 2f) antiReportRadius = 2f;
+            }
+            else
+            {
+                antiReportRadius -= 0.05f;
+                if (antiReportRadius < 0.1f) antiReportRadius = 0.1f;
+            }
+
+            if (ExtraButtons.AntiReportRadiusButton != null)
+                ExtraButtons.AntiReportRadiusButton.Name = $"Anti Report Size: {GetAntiReportRadiusName()}";
         }
 
         public static float antiReportDelay;

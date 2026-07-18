@@ -62,7 +62,6 @@ namespace Juul
                             Name = "Menu Settings",
                             Buttons = {
                                 ExtraButtons.ThemeButton,
-                                ExtraButtons.FontButton,
                                 new Button { Name = "Page Buttons", Toggle = false, Incremental = true, Up = () => Core.ChangePageButtons(false), Down = () => Core.ChangePageButtons(true) },
                                 new Button { Name = "Menu Size", Toggle = false, Incremental = true, Up = () => Core.ChangeMenuScale(true), Down = () => Core.ChangeMenuScale(false) },
                                 new Button { Name = "Button Inset", Toggle = false, Incremental = true, Up = () => Core.ChangeButtonInset(true), Down = () => Core.ChangeButtonInset(false) },
@@ -180,6 +179,10 @@ namespace Juul
                 new Category {
                     Name = "Client",
                     Buttons = {
+                        //new Button { Name = "Right Grip", Toggle = true, OnEnable = () => ControllerInputPoller.instance.rightGrab = true, OnDisable = () => ControllerInputPoller.instance.rightGrab = false },
+
+                        //new Button { Name = "Fake FBT", Toggle = true, OnEnable = Players.FakefullbodyTrackingg, OnDisable = Players.DisableFakefullbodyTrackingg, HasKeybinds = true, KeybindCategory = ExtraButtons.fakeFBTConfig },
+
                         new Button { Name = "Invis Monkey", Toggle = true, OnEnable = Players.InvisibleMonke },
                         new Button { Name = "Ghost Monkey", Toggle = true, OnEnable = Players.GhostMonke },
                         new Button { Name = "Enable Ghost View", Toggle = true, Enabled = true, OnceEnable = () => ExtraButtons.ghostview = true, OnceDisable = () => Players.GhostviewClean() },
@@ -245,6 +248,8 @@ namespace Juul
                         new Button { Name = "Anti Report Reconnect", Toggle = true, OnEnable = Safety.AntiReportReconnect },
                         new Button { Name = "Anti Report Notify", Toggle = true, OnEnable = Safety.AntiReportNotify },
                         new Button { Name = "Anti Report Quit", Toggle = true, OnEnable = Safety.AntiReportQuit },
+                        ExtraButtons.AntiReportRadiusButton,
+                        new Button { Name = "Visualize Anti Report Radius", Toggle = true, OnEnable = Safety.VisualizeAntiReportRadius, OnceDisable = Safety.CleanupAntiReportVisualization },
 
                         new Button { Name = "Anti Crash", Toggle = true, OnEnable = Safety.AntiCrash },
                         new Button { Name = "Disable Self Reports", Toggle = true, OnEnable = () => { SafetyPatches.SendReportPatch.AntiCheatSelf = true; }, OnDisable = () => { SafetyPatches.SendReportPatch.AntiCheatSelf = false; } },
@@ -564,7 +569,7 @@ namespace Juul
                             }
                         }
                     },
-                    
+                     
                 },
                 new Category {
                     Name = "Exploits",
@@ -572,14 +577,26 @@ namespace Juul
                         new Category {
                         Name = "Barrel Exploits",
                         Buttons = {
-                        new Button { Name = "Buy Barrel 1", Toggle = false, OnEnable = Overpowered.BuyBarrel },
-                        new Button { Name = "Buy Barrel 2", Toggle = false, OnEnable = Overpowered.BuyBarrel2 },
-
+                        ExtraButtons.BarrelMethodButton,
+                        new Button { Name = "Buy Barrel", Toggle = false, OnEnable = Overpowered.BuyBarrel },
                         new Button { Name = "Barrel Fling All", Toggle = true, OnEnable = Overpowered.BarrelFlingAll },
                         new Button { Name = "Barrel Fling Gun", Toggle = true, OnEnable = Overpowered.BarrelFlingGun },
                         new Button { Name = "Barrel Fling Aura", Toggle = true, OnEnable = Overpowered.BarrelFlingAura },
                         new Button { Name = "Barrel Fling On Your Touch", Toggle = true, OnEnable = Overpowered.BarrelFlingTouch },
                         new Button { Name = "Barrel Fling On Touch", Toggle = true, OnEnable = Overpowered.BarrelFlingOnYourTouch },
+                        new Button { Name = "Barrel Punch Mod [SS]", Toggle = true, OnEnable = Overpowered.BarrelPunchMod },
+                        new Button { Name = "Barrel Fling Anti Report", Toggle = true, OnEnable = Overpowered.BarrelFlingAntiReport },
+                        }
+                    },
+                    new Category {
+                        Name = "Grab Exploits",
+                        Buttons = {
+                        /*new Button { Name = "Grab Crash Gun", Toggle = true, OnEnable = Overpowered.ForceCrashGun },
+                        new Button { Name = "Grab Crash Gun might take a few tries to crash", Toggle = false, Label = true },
+                        new Button { Name = "Grab Break Movement", Toggle = true, OnEnable = Overpowered.BreakMovementGrabGun },
+                        new Button { Name = "Strong Grab FLing Gun", Toggle = true, OnEnable = Overpowered.ForceBlackGun },*/
+                        new Button { Name = "Grab Fling Gun", Toggle = true, OnEnable = Overpowered.GrabFlingGun },
+                        new Button { Name = "Grab Fling All", Toggle = true, OnEnable = Overpowered.GrabFlingAll },
                         }
                     },
                     new Category {
@@ -664,6 +681,7 @@ namespace Juul
                     new Category {
                         Name = "Lag Exploits",
                         Buttons = {
+                        ExtraButtons.LagMethodButton,
                         new Button { Name = "Lag All", Toggle = true, OnEnable = Overpowered.LagAll },
                         new Button { Name = "Lag Gun", Toggle = true, OnEnable = Overpowered.LagGun },
                         new Button { Name = "Lag Aura", Toggle = true, OnEnable = Overpowered.LagAura },
@@ -801,7 +819,10 @@ namespace Juul
                     Name = "Projectiles",
                     Buttons = {
                         new Button { Name = "Anti Snowball Fing", Toggle = true, OnEnable = () => GameplayPatches.CheckForAOEKnockbackPatch.Fling = false, OnDisable = () => GameplayPatches.CheckForAOEKnockbackPatch.Fling = true },
-                       
+                        new Button { Name = "srry next update :3", Toggle = false, Label = true },
+                        /*new Button { Name = "Big Snowball Spammer", Toggle = true, OnEnable = Projectiles.GrowingSpammer },
+                        new Button { Name = "Big Snowball Minigun", Toggle = true, OnEnable = Projectiles.GrowingMinigun },
+                        new Button { Name = "Big Snowball Fling Gun", Toggle = true, OnEnable = Projectiles.GrowingFlingGun },*/
                     }
                 },
                 new Category {

@@ -29,15 +29,20 @@ namespace Juul
         public static Button FlySpeedButton;
         public static Button SpeedBoostSpeedButton;
         public static Button WallWalkStrengthButton;
-        public static Button FontButton;
+        public static Button MenuScaleButton;
         public static Button QuestScoreButton;
         public static Button SetNameButton;
+        public static Button BarrelMethodButton;
+        public static Button AntiReportRadiusButton;
+        public static Button LagMethodButton;
+
 
         public static Category speedBoostConfig;
         public static Category wallWalkConfig;
         public static Category platformsConfig;
         public static Category flightConfig;
         public static Category nameTagsConfig;
+        public static Category fakeFBTConfig;
 
         public static Category EnabledCategory;
         public static bool ghostview = true;
@@ -49,7 +54,7 @@ namespace Juul
             EnabledCategory = new Category { Name = "Enabled" };
 
             ThemeButton = new Button { Name = $"Theme: {Core.GetCurrentThemeName()}", Toggle = false, Incremental = true, Up = () => Core.ChangeTheme(true), Down = () => Core.ChangeTheme(false) };
-            FontButton = new Button { Name = $"Font: {Core.GetCurrentFontName()}", Toggle = false, Incremental = true, Up = () => Core.ChangeFont(true), Down = () => Core.ChangeFont(false) };
+            MenuScaleButton = new Button { Name = $"Menu Scale: {Core.MenuWidth.ToString()}", Toggle = false, Incremental = true, Up = () => Core.ChangeMenuScale(true), Down = () => Core.ChangeMenuScale(false) };
             GunStyleButton = new Button { Name = "Gun Style: " + GunLib.currentLineStyle.ToString(), Toggle = false, Incremental = true, Up = () => GunLib.ChangeGunStyle(true), Down = () => GunLib.ChangeGunStyle(false) };
             GunLineSizeButton = new Button { Name = string.Format("Gun Line Size: {0}", GunLib.GunLineWidth), Toggle = false, Incremental = true, Up = () => GunLib.ChangeGunLineSize(true), Down = () => GunLib.ChangeGunLineSize(false) };
             GunSphereSizeButton = new Button { Name = string.Format("Gun Sphere Size: {0}", GunLib.SphereSize), Toggle = false, Incremental = true, Up = () => GunLib.ChangeGunSphereScale(true), Down = () => GunLib.ChangeGunSphereScale(false) };
@@ -59,6 +64,13 @@ namespace Juul
             FlySpeedButton = new Button { Name = $"Fly Speed: {Movement.speedNames[Movement.speedIndex]}", Toggle = false, Incremental = true, Up = () => Movement.ChangeFlySpeed(true), Down = () => Movement.ChangeFlySpeed(false) };
             SpeedBoostSpeedButton = new Button { Name = $"Boost: {Movement.speedNames2[Movement.speedIndex2]}", Toggle = false, Incremental = true, Up = () => Movement.ChangeSpeedBoostSpeed(true), Down = () => Movement.ChangeSpeedBoostSpeed(false) };
             WallWalkStrengthButton = new Button { Name = $"Wall Walk: {Movement.wallForceNames[Movement.wallForceIndex]}", Toggle = false, Incremental = true, Up = () => Movement.AdjustWallWalkStrength(true), Down = () => Movement.AdjustWallWalkStrength(false) };
+
+            BarrelMethodButton = new Button { Name = $"Barrel Strength: {Overpowered.GetBarrelFlingMethodName()}", Toggle = false, Incremental = true, Up = () => Overpowered.ChangeBarrelMethod(true), Down = () => Overpowered.ChangeBarrelMethod(false) };
+
+            AntiReportRadiusButton = new Button { Name = $"Anti Report Size: {Safety.GetAntiReportRadiusName()}", Toggle = false, Incremental = true, Up = () => Safety.ChangeAntiReportRadius(true), Down = () => Safety.ChangeAntiReportRadius(false) };
+
+            LagMethodButton = new Button { Name = $"Lag Method: {Overpowered.GetLagMethodName()}", Toggle = false, Incremental = true, Up = () => Overpowered.ChangeLagMethod(true), Down = () => Overpowered.ChangeLagMethod(false) };
+
 
             SavePresetButton = new Button { Name = "Save Preset: ", Toggle = true, OnceEnable = () => { KeyboardManager.IsSavingPreset = true; KeyboardManager.PresetSaveQuery = ""; KeyboardManager.KeyboardJustOpened = true; }, OnceDisable = () => KeyboardManager.IsSavingPreset = false };
 
@@ -153,8 +165,14 @@ namespace Juul
                 new KeyBind { Name = "Fly", PCKey = KeyCode.None, VRInput = VRButton.RightPrimary, HasPCBind = false, IsSingleBind = true }
             );
 
+            ButtonConfigs.Register("Fake FBT",
+                new KeyBind { Name = "Action", PCKey = KeyCode.None, VRInput = VRButton.LeftPrimary, HasPCBind = false, IsSingleBind = true }
+            );
+
             speedBoostConfig = ButtonConfigs.Get("Speed Boost").GenerateCategory();
             speedBoostConfig.Buttons.Add(SpeedBoostSpeedButton);
+
+            fakeFBTConfig = ButtonConfigs.Get("Fake FBT").GenerateCategory();
 
             wallWalkConfig = ButtonConfigs.Get("Wall Walk").GenerateCategory();
             wallWalkConfig.Buttons.Add(WallWalkStrengthButton);

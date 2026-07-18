@@ -183,6 +183,11 @@ namespace Juul
 
         public static void DrawLine(Vector3 start, Vector3 end, float width = 0.01f)
         {
+            DrawLine(start, end, Core.BaseColor, width);
+        }
+
+        public static void DrawLine(Vector3 start, Vector3 end, Color color, float width = 0.01f)
+        {
             GameObject lineObject = new GameObject("TempLine");
             lineObject.layer = 0;
 
@@ -190,7 +195,7 @@ namespace Juul
 
             Shader shader = Core.GuiTextShader ?? Shader.Find("Unlit/Color");
             lineRenderer.material = new Material(shader);
-            lineRenderer.material.color = Core.BaseColor;
+            lineRenderer.material.color = color;
 
             lineRenderer.positionCount = 2;
             lineRenderer.SetPosition(0, start);
@@ -198,8 +203,8 @@ namespace Juul
 
             lineRenderer.startWidth = width;
             lineRenderer.endWidth = width;
-            lineRenderer.startColor = Core.BaseColor;
-            lineRenderer.endColor = Core.BaseColor;
+            lineRenderer.startColor = color;
+            lineRenderer.endColor = color;
 
             lineRenderer.numCapVertices = 5;
             lineRenderer.numCornerVertices = 5;

@@ -360,9 +360,7 @@ namespace Juul
                     1 << LayerMask.NameToLayer("TransparentFX") |
                     1 << LayerMask.NameToLayer("Ignore Raycast") |
                     1 << LayerMask.NameToLayer("Zone") |
-                    1 << LayerMask.NameToLayer("Gorilla Trigger") |
                     1 << LayerMask.NameToLayer("Gorilla Boundary") |
-                    1 << LayerMask.NameToLayer("GorillaCosmetics") |
                     1 << LayerMask.NameToLayer("GorillaParticle"));
                 int layerMask = noInvisLayerMask ?? GTPlayer.Instance.locomotionEnabledLayers;
                 if (Core.TPC != null)
@@ -512,6 +510,72 @@ namespace Juul
                 {
                     GTPlayer.Instance.TeleportTo(closest.transform.position, closest.transform.rotation);
                 }
+            }
+        }
+        private static Quaternion fakefullbodyTrackinggRefRot = Quaternion.identity;
+        private static Quaternion fakefullbodyTrackinggCurRot = Quaternion.identity;
+        private static Quaternion fakefullbodyTrackinggTgtRot = Quaternion.identity;
+        private static bool fakefullbodyTrackinggInputLast;
+        private static bool isFakeFBTCamHooked = false;
+        private static Quaternion originalCamRot;
+
+        public static void FakefullbodyTrackingg()
+        {
+            if (!isFakeFBTCamHooked)
+            {
+                Camera.onPreCull += OnPreCullFakeFBT;
+                Camera.onPostRender += OnPostRenderFakeFBT;
+                isFakeFBTCamHooked = true;
+            }
+
+            Transform head = GTPlayer.Instance.headCollider.transform;
+            var group = ButtonConfigs.Get("Fake FBT");
+            bool button = group != null && group.Binds.Count > 0 ? group.Binds[0].IsPressed() : ControllerInputPoller.instance.leftControllerPrimaryButton;
+
+            if (button && !fakefullbodyTrackinggInputLast)
+                fakefullbodyTrackinggRefRot = head.rotation;
+
+            fakefullbodyTrackinggInputLast = button;
+
+            fakefullbodyTrackinggTgtRot = button
+                ? head.rotation * Quaternion.Inverse(fakefullbodyTrackinggRefRot)
+                : Quaternion.identity;
+
+            float t = 1f - Mathf.Exp(-5f * Time.deltaTime);
+            fakefullbodyTrackinggCurRot = Quaternion.Slerp(fakefullbodyTrackinggCurRot, fakefullbodyTrackinggTgtRot, t);
+
+            Transform rig = GorillaTagger.Instance.offlineVRRig.transform;
+            rig.position = head.position + (fakefullbodyTrackinggCurRot * (rig.position - head.position));
+            rig.rotation = fakefullbodyTrackinggCurRot * rig.rotation;
+        }
+
+        public static void DisableFakefullbodyTrackingg()
+        {
+            fakefullbodyTrackinggCurRot = Quaternion.identity;
+            fakefullbodyTrackinggTgtRot = Quaternion.identity;
+            
+            if (isFakeFBTCamHooked)
+            {
+                Camera.onPreCull -= OnPreCullFakeFBT;
+                Camera.onPostRender -= OnPostRenderFakeFBT;
+                isFakeFBTCamHooked = false;
+            }
+        }
+
+        private static void OnPreCullFakeFBT(Camera cam)
+        {
+            if (cam == GorillaTagger.Instance.mainCamera)
+            {
+                originalCamRot = cam.transform.rotation;
+                cam.transform.rotation = fakefullbodyTrackinggCurRot * originalCamRot;
+            }
+        }
+
+        private static void OnPostRenderFakeFBT(Camera cam)
+        {
+            if (cam == GorillaTagger.Instance.mainCamera)
+            {
+                cam.transform.rotation = originalCamRot;
             }
         }
     }

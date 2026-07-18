@@ -38,8 +38,10 @@ using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using UnityEngine.UIElements;
 using UnityEngine.XR;
+using static Juul.Patches;
 using static OVRColocationSession;
 using static SuperInfectionManager;
+using static TransferrableObject;
 using static Unity.Burst.Intrinsics.X86.Avx;
 using static UnityEngine.InputSystem.DefaultInputActions;
 using Application = UnityEngine.Application;
@@ -51,8 +53,9 @@ using Text = UnityEngine.UI.Text;
 
 namespace Juul
 {
-    internal class Overpowered
+    public class Overpowered : MonoBehaviour
     {
+        
 
         public static void GetOwnerOfSIEntity()
         {
@@ -85,6 +88,8 @@ namespace Juul
         }
 
         public static float delay = 0.5f;
+        public static float lagcd = 0f;
+        public static int lagPowerIndex = 0;
 
 
         public static void SpamDeploy(DeployableObject deployable)
@@ -114,30 +119,149 @@ namespace Juul
             }
         }
         public static VRRig targetFlinged;
-        
+        public static int barrelFlingMode = 1;
+
+        public static string GetBarrelFlingMethodName()
+        {
+            switch (barrelFlingMode)
+            {
+                case 0: return "0.5x";
+                case 1: return "1x";
+                case 2: return "2x";
+                case 3: return "5x";
+                case 4: return "10x";
+                default: return "1x";
+            }
+        }
+
+        public static void ChangeBarrelMethod(bool forward)
+        {
+            if (forward)
+                barrelFlingMode = (barrelFlingMode + 1) % 5;
+            else
+                barrelFlingMode = (barrelFlingMode - 1 + 5) % 5;
+
+            if (ExtraButtons.BarrelMethodButton != null)
+                ExtraButtons.BarrelMethodButton.Name = $"Barrel Strength: {GetBarrelFlingMethodName()}";
+        }
+
+        public static int lagMethod = 0;
+
+        public static string GetLagMethodName()
+        {
+            switch (lagMethod)
+            {
+                case 0: return "Method 1";
+                case 1: return "Method 2";
+                default: return "Method 1";
+            }
+        }
+
+        public static void ChangeLagMethod(bool forward)
+        {
+            if (forward)
+                lagMethod = (lagMethod + 1) % 2;
+            else
+                lagMethod = (lagMethod - 1 + 2) % 2;
+
+            if (ExtraButtons.LagMethodButton != null)
+                ExtraButtons.LagMethodButton.Name = $"Lag Method: {GetLagMethodName()}";
+        }
+
+        public static DeployableObject GetBarrelDeployable()
+        {
+            if (GorillaTagger.Instance != null && GorillaTagger.Instance.offlineVRRig != null)
+            {
+                foreach (var obj in GorillaTagger.Instance.offlineVRRig.GetComponentsInChildren<DeployableObject>(true))
+                {
+                    if (obj.gameObject.name == "LMAPE.") return obj;
+                }
+            }
+            return null;
+        }
+
         public static void SendBarrelFling(int Mode)
         {
             switch (Mode)
             {
                 case 0:
-                    BarrelFlingMethod2();
+                    BarrelFlingMethod1();
                     break;
                 case 1:
-                    BarrelFlingMethod3();
+                    BarrelFlingMethod2();
                     break;
                 case 2:
+                    BarrelFlingMethod3();
+                    break;
+                case 3:
                     BarrelFlingMethod4();
                     break;
+                case 4:
+                    BarrelFlingMethod5();
+                    break;
             }
+        }
+        public static void BarrelFlingMethod1()
+        {
+            if (targetFlinged == null || targetFlinged.isLocal) return;
+
+            var deployable = GetBarrelDeployable();
+ 
+
+            if (deployable == null) return;
+
+            var child = Traverse.Create(deployable).Field("_child").GetValue<DeployedChild>();
+            if (child == null) return;
+
+            var rb = Traverse.Create(child).Field("_rigidbody").GetValue<Rigidbody>();
+            if (rb == null) return;
+
+            var data = PhotonUtils.FetchScratchArray(5);
+            data[0] = (int)typeof(DeployableObject)
+                .GetField("_deploySignal", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(deployable)
+                .GetType().GetField("_signalID", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(
+                    typeof(DeployableObject).GetField("_deploySignal", BindingFlags.NonPublic | BindingFlags.Instance)
+                        .GetValue(deployable));
+            data[1] = PhotonNetwork.ServerTimestamp;
+            data[2] = BitPackUtils.PackWorldPosForNetwork(targetFlinged.bodyTransform.position +
+                                                          new Vector3(0, -0.2f, 0));
+            data[3] = 469893376;
+            data[4] = BitPackUtils.PackWorldPosForNetwork(targetFlinged.bodyTransform.up * 500f);
+
+            PhotonNetwork.RaiseEvent(177, data,
+                TargetedWCO(targetFlinged.Creator.ActorNumber, EventCaching.AddToRoomCacheGlobal), STS());
+
+            child.Deploy(deployable, targetFlinged.bodyTransform.position + new Vector3(0, -0.2f, 0),
+                Quaternion.Euler(Random.Range(0, 360), Random.Range(0, 360), Random.Range(0, 360)),
+                targetFlinged.bodyTransform.up * 500f);
+            deployable.DeployChild();
+            SpamDeploy(deployable);
+
+            rb.linearDamping = 0f;
+            rb.angularDamping = 0f;
+            rb.detectCollisions = false;
+            rb.velocity = targetFlinged.bodyTransform.up * 500f;
+
+            var barrelObj = GetBarrelDeployable()?.gameObject;
+
+            if (barrelObj != null)
+                barrelObj.transform.rotation =
+                    Quaternion.Euler(Random.Range(0, 360), Random.Range(0, 360), Random.Range(0, 360));
+
+            for (var i = 0; i < 4; i++)
+            {
+                rb.AddForce(targetFlinged.bodyTransform.up * 500f, ForceMode.Force);
+                rb.AddForce(targetFlinged.bodyTransform.up * 500f, ForceMode.Impulse);
+                rb.AddForce(targetFlinged.bodyTransform.up * 500f, ForceMode.VelocityChange);
+                rb.AddForce(targetFlinged.bodyTransform.up * 500f, ForceMode.Acceleration);
+            }
+            child.ReturnToParent(2f);
         }
         public static void BarrelFlingMethod2()
         {
             if (targetFlinged == null || targetFlinged.isLocal) return;
 
-            var deployable = GameObject
-                .Find(
-                    "Player Objects/Local VRRig/Local Gorilla Player/rig/body_pivot/shoulder.R/upper_arm.R/forearm.R/Right Arm Item Anchor/DropZoneAnchor/HoldableThrowableBarrelLeprechaun_Anchor(Clone)/LMAPE.")
-                .GetComponent<DeployableObject>();
+            var deployable = GetBarrelDeployable();
 
             if (deployable == null) return;
 
@@ -173,8 +297,7 @@ namespace Juul
             rb.detectCollisions = false;
             rb.velocity = targetFlinged.bodyTransform.up * 9999.99f;
 
-            var barrelObj = GameObject.Find(
-                "Player Objects/Local VRRig/Local Gorilla Player/rig/body_pivot/shoulder.R/upper_arm.R/forearm.R/Right Arm Item Anchor/DropZoneAnchor/HoldableThrowableBarrelLeprechaun_Anchor(Clone)/LMAPE.");
+            var barrelObj = GetBarrelDeployable()?.gameObject;
 
             if (barrelObj != null)
                 barrelObj.transform.rotation =
@@ -193,10 +316,7 @@ namespace Juul
         {
             if (targetFlinged == null || targetFlinged.isLocal) return;
 
-            var deployable = GameObject
-                .Find(
-                    "Player Objects/Local VRRig/Local Gorilla Player/rig/body_pivot/shoulder.R/upper_arm.R/forearm.R/Right Arm Item Anchor/DropZoneAnchor/HoldableThrowableBarrelLeprechaun_Anchor(Clone)/LMAPE.")
-                .GetComponent<DeployableObject>();
+            var deployable = GetBarrelDeployable();
 
             if (deployable == null) return;
 
@@ -216,24 +336,23 @@ namespace Juul
             data[2] = BitPackUtils.PackWorldPosForNetwork(targetFlinged.bodyTransform.position +
                                                           new Vector3(0, -0.2f, 0));
             data[3] = 469893376;
-            data[4] = BitPackUtils.PackWorldPosForNetwork(targetFlinged.bodyTransform.up * 1000f);
+            data[4] = BitPackUtils.PackWorldPosForNetwork(targetFlinged.bodyTransform.up * 2000f);
 
             PhotonNetwork.RaiseEvent(177, data,
                 TargetedWCO(targetFlinged.Creator.ActorNumber, EventCaching.AddToRoomCacheGlobal), STS());
 
             child.Deploy(deployable, targetFlinged.bodyTransform.position + new Vector3(0, -0.2f, 0),
                 Quaternion.Euler(Random.Range(0, 360), Random.Range(0, 360), Random.Range(0, 360)),
-                targetFlinged.bodyTransform.up * 1000f);
+                targetFlinged.bodyTransform.up * 2000f);
             deployable.DeployChild();
             SpamDeploy(deployable);
 
             rb.linearDamping = 0f;
             rb.angularDamping = 0f;
             rb.detectCollisions = false;
-            rb.velocity = targetFlinged.bodyTransform.up * 1000f;
+            rb.velocity = targetFlinged.bodyTransform.up * 2000f;
 
-            var barrelObj = GameObject.Find(
-                "Player Objects/Local VRRig/Local Gorilla Player/rig/body_pivot/shoulder.R/upper_arm.R/forearm.R/Right Arm Item Anchor/DropZoneAnchor/HoldableThrowableBarrelLeprechaun_Anchor(Clone)/LMAPE.");
+            var barrelObj = GetBarrelDeployable()?.gameObject;
 
             if (barrelObj != null)
                 barrelObj.transform.rotation =
@@ -241,10 +360,10 @@ namespace Juul
 
             for (var i = 0; i < 4; i++)
             {
-                rb.AddForce(targetFlinged.bodyTransform.up * 1000f, ForceMode.Force);
-                rb.AddForce(targetFlinged.bodyTransform.up * 1000f, ForceMode.Impulse);
-                rb.AddForce(targetFlinged.bodyTransform.up * 1000f, ForceMode.VelocityChange);
-                rb.AddForce(targetFlinged.bodyTransform.up * 1000f, ForceMode.Acceleration);
+                rb.AddForce(targetFlinged.bodyTransform.up * 2000f, ForceMode.Force);
+                rb.AddForce(targetFlinged.bodyTransform.up * 2000f, ForceMode.Impulse);
+                rb.AddForce(targetFlinged.bodyTransform.up * 2000f, ForceMode.VelocityChange);
+                rb.AddForce(targetFlinged.bodyTransform.up * 2000f, ForceMode.Acceleration);
             }
             child.ReturnToParent(2f);
         }
@@ -252,10 +371,7 @@ namespace Juul
         {
             if (targetFlinged == null || targetFlinged.isLocal) return;
 
-            var deployable = GameObject
-                .Find(
-                    "Player Objects/Local VRRig/Local Gorilla Player/rig/body_pivot/shoulder.R/upper_arm.R/forearm.R/Right Arm Item Anchor/DropZoneAnchor/HoldableThrowableBarrelLeprechaun_Anchor(Clone)/LMAPE.")
-                .GetComponent<DeployableObject>();
+            var deployable = GetBarrelDeployable();
 
             if (deployable == null) return;
 
@@ -275,38 +391,98 @@ namespace Juul
             data[2] = BitPackUtils.PackWorldPosForNetwork(targetFlinged.bodyTransform.position +
                                                           new Vector3(0, -0.2f, 0));
             data[3] = 469893376;
-            data[4] = BitPackUtils.PackWorldPosForNetwork(targetFlinged.bodyTransform.up * 100f);
+            data[4] = BitPackUtils.PackWorldPosForNetwork(targetFlinged.bodyTransform.up * 5000f);
 
             PhotonNetwork.RaiseEvent(177, data,
                 TargetedWCO(targetFlinged.Creator.ActorNumber, EventCaching.AddToRoomCacheGlobal), STS());
 
             child.Deploy(deployable, targetFlinged.bodyTransform.position + new Vector3(0, -0.2f, 0),
                 Quaternion.Euler(Random.Range(0, 360), Random.Range(0, 360), Random.Range(0, 360)),
-                targetFlinged.bodyTransform.up * 100f);
+                targetFlinged.bodyTransform.up * 5000f);
             deployable.DeployChild();
             SpamDeploy(deployable);
 
             rb.linearDamping = 0f;
             rb.angularDamping = 0f;
             rb.detectCollisions = false;
-            rb.velocity = targetFlinged.bodyTransform.up * 100f;
+            rb.velocity = targetFlinged.bodyTransform.up * 5000f;
 
-            var barrelObj = GameObject.Find(
-                "Player Objects/Local VRRig/Local Gorilla Player/rig/body_pivot/shoulder.R/upper_arm.R/forearm.R/Right Arm Item Anchor/DropZoneAnchor/HoldableThrowableBarrelLeprechaun_Anchor(Clone)/LMAPE.");
+            var barrelObj = GetBarrelDeployable()?.gameObject;
 
             if (barrelObj != null)
                 barrelObj.transform.rotation =
                     Quaternion.Euler(Random.Range(0, 360), Random.Range(0, 360), Random.Range(0, 360));
 
-            for (var i = 0; i < 4; i++)
+            for (var i = 0; i < 10; i++)
             {
-                rb.AddForce(targetFlinged.bodyTransform.up * 100f, ForceMode.Force);
-                rb.AddForce(targetFlinged.bodyTransform.up * 100f, ForceMode.Impulse);
-                rb.AddForce(targetFlinged.bodyTransform.up * 100f, ForceMode.VelocityChange);
-                rb.AddForce(targetFlinged.bodyTransform.up * 100f, ForceMode.Acceleration);
+                rb.AddForce(targetFlinged.bodyTransform.up * 5000f, ForceMode.Force);
+                rb.AddForce(targetFlinged.bodyTransform.up * 5000f, ForceMode.Impulse);
+                rb.AddForce(targetFlinged.bodyTransform.up * 5000f, ForceMode.VelocityChange);
+                rb.AddForce(targetFlinged.bodyTransform.up * 5000f, ForceMode.Acceleration);
             }
             child.ReturnToParent(2f);
         }
+
+        public static void BarrelFlingMethod5()
+        {
+            if (targetFlinged == null || targetFlinged.isLocal) return;
+
+            var deployable = GetBarrelDeployable();
+
+            if (deployable == null) return;
+
+            var child = Traverse.Create(deployable).Field("_child").GetValue<DeployedChild>();
+            if (child == null) return;
+
+            var rb = Traverse.Create(child).Field("_rigidbody").GetValue<Rigidbody>();
+            if (rb == null) return;
+
+            var data = PhotonUtils.FetchScratchArray(5);
+            data[0] = (int)typeof(DeployableObject)
+                .GetField("_deploySignal", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(deployable)
+                .GetType().GetField("_signalID", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(
+                    typeof(DeployableObject).GetField("_deploySignal", BindingFlags.NonPublic | BindingFlags.Instance)
+                        .GetValue(deployable));
+            data[1] = PhotonNetwork.ServerTimestamp;
+            data[2] = BitPackUtils.PackWorldPosForNetwork(targetFlinged.bodyTransform.position +
+                                                          new Vector3(0, -0.2f, 0));
+            data[3] = 469893376;
+            data[4] = BitPackUtils.PackWorldPosForNetwork(targetFlinged.bodyTransform.up * 10000f);
+
+            PhotonNetwork.RaiseEvent(177, data,
+                TargetedWCO(targetFlinged.Creator.ActorNumber, EventCaching.AddToRoomCacheGlobal), STS());
+
+            child.Deploy(deployable, targetFlinged.bodyTransform.position + new Vector3(0, -0.2f, 0),
+                Quaternion.Euler(Random.Range(0, 360), Random.Range(0, 360), Random.Range(0, 360)),
+                targetFlinged.bodyTransform.up * 10000f);
+            deployable.DeployChild();
+            SpamDeploy(deployable);
+
+            rb.linearDamping = 0f;
+            rb.angularDamping = 0f;
+            rb.detectCollisions = false;
+            rb.velocity = targetFlinged.bodyTransform.up * 10000f;
+            rb.mass = 0.001f;
+            rb.useGravity = false;
+
+            var barrelObj = GetBarrelDeployable()?.gameObject;
+
+            if (barrelObj != null)
+                barrelObj.transform.rotation =
+                    Quaternion.Euler(Random.Range(0, 360), Random.Range(0, 360), Random.Range(0, 360));
+
+            for (var i = 0; i < 20; i++)
+            {
+                rb.AddForce(targetFlinged.bodyTransform.up * 10000f, ForceMode.Force);
+                rb.AddForce(targetFlinged.bodyTransform.up * 10000f, ForceMode.Impulse);
+                rb.AddForce(targetFlinged.bodyTransform.up * 10000f, ForceMode.VelocityChange);
+                rb.AddForce(targetFlinged.bodyTransform.up * 10000f, ForceMode.Acceleration);
+                rb.AddForce(targetFlinged.bodyTransform.forward * 5000f, ForceMode.Impulse);
+                rb.AddForce(targetFlinged.bodyTransform.right * 2500f, ForceMode.VelocityChange);
+            }
+            child.ReturnToParent(1f);
+        }
+
 
         public static SendOptions STS()
         {
@@ -326,75 +502,81 @@ namespace Juul
         }
 
 
-        
+
 
         public static void BarrelFlingAll()
-         {
-             foreach (VRRig vrrig in VRRigCache.ActiveRigs)
-             {
-                 if (!vrrig.isMyPlayer && !vrrig.isOfflineVRRig)
-                 {
-                     targetFlinged = vrrig;
-                     SendBarrelFling(0);
-                 }
-             }
-         }
-         public static void BarrelFlingGun()
-         {
-             GunLib.StartPointerSystem(() =>
-             {
-                 if (GunLib.LockedPlayer != null)
-                 {
-                     targetFlinged = GunLib.LockedPlayer;
-                     SendBarrelFling(0);
-                 }
-             }, true);
-         }
-         public static void BarrelFlingSelf()
-         {
-             targetFlinged = GorillaTagger.Instance.offlineVRRig;
-             SendBarrelFling(0);
-         }
-         public static void BarrelFlingAura()
-         {
-             List<VRRig> vrriglist = new List<VRRig>();
-             foreach (VRRig vrrig in VRRigCache.ActiveRigs)
-             {
-                 if ((Vector3.Distance(vrrig.transform.position, GorillaTagger.Instance.offlineVRRig.transform.position) <= 3.54f && vrrig != GorillaTagger.Instance.offlineVRRig))
-                 {
-                     vrriglist.Add(vrrig);
-                 }
-                 foreach (VRRig rigs in vrriglist)
-                 {
-                     targetFlinged = rigs;
-                     SendBarrelFling(0);
-                 }
-             }
-         }
-         public static void BarrelFlingTouch()
-         {
-             foreach (VRRig vrrig in VRRigCache.ActiveRigs)
-             {
-                 if (vrrig != GorillaTagger.Instance.offlineVRRig && (Vector3.Distance(GorillaTagger.Instance.leftHandTransform.position, vrrig.headMesh.transform.position) < 0.25f || Vector3.Distance(GorillaTagger.Instance.rightHandTransform.position, vrrig.headMesh.transform.position) < 0.25f || Vector3.Distance(GorillaTagger.Instance.leftHandTransform.position, vrrig.bodyTransform.transform.position) < 0.25f || Vector3.Distance(GorillaTagger.Instance.rightHandTransform.position, vrrig.bodyTransform.transform.position) < 0.25f))
-                 {
-                     targetFlinged = vrrig;
-                     SendBarrelFling(0);
-                 }
-             }
-         }
-         public static void BarrelFlingOnYourTouch()
-         {
-             foreach (VRRig vrrig in VRRigCache.ActiveRigs)
-             {
-                 if (!vrrig.isMyPlayer && !vrrig.isOfflineVRRig && ((double)Vector3.Distance(vrrig.rightHandTransform.position, GorillaTagger.Instance.offlineVRRig.transform.position) <= 0.5
-                    || (double)Vector3.Distance(vrrig.leftHandTransform.position, GorillaTagger.Instance.offlineVRRig.transform.position) <= 0.5
-                    || (double)Vector3.Distance(vrrig.transform.position, GorillaTagger.Instance.offlineVRRig.transform.position) <= 0.5))
-                 {
-                     targetFlinged = vrrig;
-                     SendBarrelFling(0);
-                 }
-             }
-         }
+        {
+            GorillaTagger.Instance.StartCoroutine(BarrelFlingAllDelay());
+        }
+
+        private static IEnumerator BarrelFlingAllDelay()
+        {
+            foreach (VRRig vrrig in VRRigCache.ActiveRigs)
+            {
+                if (!vrrig.isMyPlayer && !vrrig.isOfflineVRRig)
+                {
+                    targetFlinged = vrrig;
+                    BarrelFlingMethod5();
+                    yield return new WaitForSeconds(0.15f);
+                }
+            }
+        }
+        public static void BarrelFlingGun()
+        {
+            GunLib.StartPointerSystem(() =>
+            {
+                if (GunLib.LockedPlayer != null)
+                {
+                    targetFlinged = GunLib.LockedPlayer;
+                    SendBarrelFling(barrelFlingMode);
+                }
+            }, true);
+        }
+        public static void BarrelFlingSelf()
+        {
+            targetFlinged = GorillaTagger.Instance.offlineVRRig;
+            SendBarrelFling(barrelFlingMode);
+        }
+        public static void BarrelFlingAura()
+        {
+            List<VRRig> vrriglist = new List<VRRig>();
+            foreach (VRRig vrrig in VRRigCache.ActiveRigs)
+            {
+                if ((Vector3.Distance(vrrig.transform.position, GorillaTagger.Instance.offlineVRRig.transform.position) <= 3.54f && vrrig != GorillaTagger.Instance.offlineVRRig))
+                {
+                    vrriglist.Add(vrrig);
+                }
+                foreach (VRRig rigs in vrriglist)
+                {
+                    targetFlinged = rigs;
+                    SendBarrelFling(barrelFlingMode);
+                }
+            }
+        }
+        public static void BarrelFlingTouch()
+        {
+            foreach (VRRig vrrig in VRRigCache.ActiveRigs)
+            {
+                if (vrrig != GorillaTagger.Instance.offlineVRRig && (Vector3.Distance(GorillaTagger.Instance.leftHandTransform.position, vrrig.headMesh.transform.position) < 0.25f || Vector3.Distance(GorillaTagger.Instance.rightHandTransform.position, vrrig.headMesh.transform.position) < 0.25f || Vector3.Distance(GorillaTagger.Instance.leftHandTransform.position, vrrig.bodyTransform.transform.position) < 0.25f || Vector3.Distance(GorillaTagger.Instance.rightHandTransform.position, vrrig.bodyTransform.transform.position) < 0.25f))
+                {
+                    targetFlinged = vrrig;
+                    SendBarrelFling(barrelFlingMode);
+                }
+            }
+        }
+        public static void BarrelFlingOnYourTouch()
+        {
+            foreach (VRRig vrrig in VRRigCache.ActiveRigs)
+            {
+                if (!vrrig.isMyPlayer && !vrrig.isOfflineVRRig && ((double)Vector3.Distance(vrrig.rightHandTransform.position, GorillaTagger.Instance.offlineVRRig.transform.position) <= 0.5
+                   || (double)Vector3.Distance(vrrig.leftHandTransform.position, GorillaTagger.Instance.offlineVRRig.transform.position) <= 0.5
+                   || (double)Vector3.Distance(vrrig.transform.position, GorillaTagger.Instance.offlineVRRig.transform.position) <= 0.5))
+                {
+                    targetFlinged = vrrig;
+                    SendBarrelFling(barrelFlingMode);
+                }
+            }
+        }
 
         public static void BuyBarrel()
         {
@@ -404,7 +586,63 @@ namespace Juul
         {
             CosmeticsController.instance.currentCart.Insert(0, CosmeticsController.instance.GetItemFromDict("LMAPH."));
         }
-     
+
+        public static void BarrelPunchMod()
+        {
+            foreach (VRRig vrrig in VRRigCache.ActiveRigs)
+            {
+                if (vrrig != GorillaTagger.Instance.offlineVRRig)
+                {
+                    float leftDistance = Vector3.Distance(GorillaTagger.Instance.leftHandTransform.position, vrrig.headMesh.transform.position);
+                    float rightDistance = Vector3.Distance(GorillaTagger.Instance.rightHandTransform.position, vrrig.headMesh.transform.position);
+                    float leftBodyDistance = Vector3.Distance(GorillaTagger.Instance.leftHandTransform.position, vrrig.bodyTransform.transform.position);
+                    float rightBodyDistance = Vector3.Distance(GorillaTagger.Instance.rightHandTransform.position, vrrig.bodyTransform.transform.position);
+
+                    if (leftDistance < 0.45f || rightDistance < 0.45f || leftBodyDistance < 0.45f || rightBodyDistance < 0.45f)
+                    {
+                        targetFlinged = vrrig;
+                        SendBarrelFling(barrelFlingMode);
+                    }
+
+                    float theirLeftDistance = Vector3.Distance(vrrig.leftHandTransform.position, GorillaTagger.Instance.offlineVRRig.transform.position);
+                    float theirRightDistance = Vector3.Distance(vrrig.rightHandTransform.position, GorillaTagger.Instance.offlineVRRig.transform.position);
+                    float theirBodyDistance = Vector3.Distance(vrrig.transform.position, GorillaTagger.Instance.offlineVRRig.transform.position);
+
+                    if (theirLeftDistance <= 0.5 || theirRightDistance <= 0.5 || theirBodyDistance <= 0.5)
+                    {
+                        Vector3 flingDirection = (GorillaTagger.Instance.offlineVRRig.transform.position - vrrig.transform.position).normalized;
+                        GorillaTagger.Instance.rigidbody.velocity = flingDirection * 8f;
+                    }
+                }
+            }
+        }
+
+        public static void BarrelFlingAntiReport()
+        {
+            if (!NetworkSystem.Instance.InRoom) return;
+
+            foreach (GorillaPlayerScoreboardLine line in GorillaScoreboardTotalUpdater.allScoreboardLines)
+            {
+                if (line.linePlayer != NetworkSystem.Instance.LocalPlayer) continue;
+                Transform report = line.reportButton.gameObject.transform;
+
+                foreach (VRRig vrrig in VRRigCache.ActiveRigs)
+                {
+                    if (!vrrig.isLocal)
+                    {
+                        float D1 = Vector3.Distance(vrrig.rightHandTransform.position, report.position);
+                        float D2 = Vector3.Distance(vrrig.leftHandTransform.position, report.position);
+
+                        if (D1 < Safety.antiReportRadius || D2 < Safety.antiReportRadius)
+                        {
+                            targetFlinged = vrrig;
+                            SendBarrelFling(barrelFlingMode);
+                        }
+                    }
+                }
+            }
+        }
+
 
         public static void DestroyAll()
         {
@@ -572,7 +810,7 @@ namespace Juul
             GorillaTagManager.instance.StartPlaying();
             GorillaScoreboardTotalUpdater.instance.UpdateActiveScoreboards();
         }
-     
+
         public static void StutterGun()
         {
             GunLib.StartPointerSystem(() =>
@@ -591,15 +829,14 @@ namespace Juul
         {
             GunLib.StartPointerSystem(() =>
             {
-                LagPlayer(GunLib.LockedPlayer);
+                if (GunLib.LockedPlayer != null)
+                    SendLagGun(lagMethod, GunLib.LockedPlayer.Creator);
             }, true);
         }
         public static void LagAll()
         {
-            foreach (VRRig p in VRRigCache.ActiveRigs.Where(r => r != VRRig.LocalRig))
-            {
-                LagPlayer(p);
-            }
+            if (ControllerInputPoller.instance.rightControllerIndexFloat > 0.1f)
+                SendLagAll(lagMethod);
         }
         public static void LagOnYourTouch()
         {
@@ -779,44 +1016,175 @@ namespace Juul
         }
         public static void LagTest67()
         {
-            if (Time.time <= delay) return;
-            foreach (VRRig p in VRRigCache.ActiveRigs.Where(r => r != VRRig.LocalRig))
-                LagPlayerTest(p, true);
-            delay = Time.time + 8.5f;
+            GunLib.StartPointerSystem(() =>
+            {
+                LagPlayerTest(GunLib.LockedPlayer);
+            }, true);
         }
         public static void LagPlayerTest(VRRig player, bool bypassDelay = false)
         {
             if (!bypassDelay && Time.time <= delay) return;
-            for (int i = 0; i < 3796; i++) PhotonNetwork.NetworkingClient.LoadBalancingPeer.OpRaiseEvent(210, new ExitGames.Client.Photon.Hashtable(), new RaiseEventOptions { TargetActors = new int[] { player.Creator.ActorNumber } }, SendOptions.SendUnreliable);
+            for (int i = 0; i < 3796; i++) PhotonNetwork.NetworkingClient.LoadBalancingPeer.OpRaiseEvent(51, new ExitGames.Client.Photon.Hashtable(), new RaiseEventOptions { TargetActors = new int[] { player.Creator.ActorNumber } }, SendOptions.SendUnreliable);
             PhotonNetwork.NetworkingClient.LoadBalancingPeer.SendOutgoingCommands();
             if (!bypassDelay) delay = Time.time + 8.5f;
+        }
+
+        public static void Send186(int power, float delay, NetPlayer plr)
+        {
+            if (!PhotonNetwork.InRoom)
+                return;
+
+            var hash = new Hashtable();
+            if (Time.time > lagcd)
+            {
+                lagcd = Time.time + delay;
+                for (var i = 0; i < power; i++)
+                    PhotonNetwork.NetworkingClient.LoadBalancingPeer.OpRaiseEvent(186, hash[float.NaN] = float.NaN,
+                        new RaiseEventOptions
+                        {
+                            TargetActors = new[]
+                            {
+                                plr.ActorNumber
+                            }
+                        }, SendOptions.SendUnreliable);
+                PhotonNetwork.NetworkingClient.LoadBalancingPeer.SendOutgoingCommands();
+            }
+        }
+
+        public static void Send186(int power, float delay)
+        {
+            if (!PhotonNetwork.InRoom)
+                return;
+
+            var hash = new Hashtable();
+            if (Time.time > lagcd)
+            {
+                lagcd = Time.time + delay;
+                for (var i = 0; i < power; i++)
+                    PhotonNetwork.NetworkingClient.LoadBalancingPeer.OpRaiseEvent(186, hash[float.NaN] = float.NaN,
+                        new RaiseEventOptions
+                        {
+                            Receivers = 0
+                        }, SendOptions.SendUnreliable);
+                PhotonNetwork.NetworkingClient.LoadBalancingPeer.SendOutgoingCommands();
+            }
+        }
+
+        public static void Send202(int power, float delay, NetPlayer plr)
+        {
+            if (!PhotonNetwork.InRoom)
+                return;
+
+            var hash = new Hashtable();
+            if (Time.time > lagcd)
+            {
+                lagcd = Time.time + delay;
+                for (var i = 0; i < power; i++)
+                {
+                    PhotonNetwork.NetworkingClient.LoadBalancingPeer.OpRaiseEvent(202,
+                        hash[-float.NaN] = -float.NaN, new RaiseEventOptions
+                        {
+                            TargetActors = new[]
+                            {
+                                plr.ActorNumber
+                            }
+                        }, new SendOptions
+                        {
+                            Encrypt = true,
+                            Reliability = false,
+                            DeliveryMode = DeliveryMode.Unreliable
+                        });
+                }
+
+                PhotonNetwork.NetworkingClient.LoadBalancingPeer.SendOutgoingCommands();
+            }
+        }
+
+        public static void Send202(int power, float delay)
+        {
+            if (!PhotonNetwork.InRoom)
+                return;
+
+            var hash = new Hashtable();
+            if (Time.time > lagcd)
+            {
+                lagcd = Time.time + 1.5f;
+                for (var i = 0; i < 600; i++)
+                {
+                    PhotonNetwork.NetworkingClient.LoadBalancingPeer.OpRaiseEvent(202,
+                        hash[-float.NaN] = -float.NaN, new RaiseEventOptions
+                        {
+                            Receivers = 0
+                        }, new SendOptions
+                        {
+                            Encrypt = true,
+                            Reliability = false,
+                            DeliveryMode = DeliveryMode.Unreliable
+                        });
+                }
+
+                PhotonNetwork.NetworkingClient.LoadBalancingPeer.SendOutgoingCommands();
+            }
+        }
+
+        public static void SendLagAll(int mode)
+        {
+            if (!PhotonNetwork.InRoom)
+                return;
+
+            if (mode == 0)
+            {
+                Send186(600, 1.5f);
+            }
+            else if (mode == 1)
+            {
+                Send202(2400, 7f);
+            }
+        }
+
+        public static void SendLagGun(int mode, NetPlayer player)
+        {
+            if (!PhotonNetwork.InRoom || player == null)
+                return;
+
+            if (mode == 0)
+            {
+                Send186(600, 1.5f, player);
+            }
+            else if (mode == 1)
+            {
+                Send202(2400, 7f, player);
+            }
         }
 
         public static void CrashPlayer(VRRig player, bool bypassDelay = false)
         {
             if (!bypassDelay && Time.time <= delay) return;
-            for (int i = 0; i < 1875; i++) PhotonNetwork.NetworkingClient.LoadBalancingPeer.OpRaiseEvent(3, new ExitGames.Client.Photon.Hashtable(), new RaiseEventOptions { TargetActors = new int[] { player.Creator.ActorNumber } }, SendOptions.SendUnreliable);
+            for (int i = 0; i < 1875; i++) PhotonNetwork.NetworkingClient.LoadBalancingPeer.OpRaiseEvent(202, new ExitGames.Client.Photon.Hashtable(), new RaiseEventOptions { TargetActors = new int[] { player.Creator.ActorNumber } }, SendOptions.SendUnreliable);
             PhotonNetwork.NetworkingClient.LoadBalancingPeer.SendOutgoingCommands();
             if (!bypassDelay) delay = Time.time + 4.54f;
         }
+
         public static void LagPlayer(VRRig player, bool bypassDelay = false)
         {
             if (!bypassDelay && Time.time <= delay) return;
-            for (int i = 0; i < 600; i++) PhotonNetwork.NetworkingClient.LoadBalancingPeer.OpRaiseEvent(3, new ExitGames.Client.Photon.Hashtable(), new RaiseEventOptions { TargetActors = new int[] { player.Creator.ActorNumber } }, SendOptions.SendUnreliable);
+            for (int i = 0; i < 600; i++) PhotonNetwork.NetworkingClient.LoadBalancingPeer.OpRaiseEvent(202, new ExitGames.Client.Photon.Hashtable(), new RaiseEventOptions { TargetActors = new int[] { player.Creator.ActorNumber } }, SendOptions.SendUnreliable);
             PhotonNetwork.NetworkingClient.LoadBalancingPeer.SendOutgoingCommands();
             if (!bypassDelay) delay = Time.time + 1.3f;
         }
+
         public static void StrongLagPlayer(VRRig player, bool bypassDelay = false)
         {
             if (!bypassDelay && Time.time <= delay) return;
-            for (int i = 0; i < 3796; i++) PhotonNetwork.NetworkingClient.LoadBalancingPeer.OpRaiseEvent(3, new ExitGames.Client.Photon.Hashtable(), new RaiseEventOptions { TargetActors = new int[] { player.Creator.ActorNumber } }, SendOptions.SendUnreliable);
+            for (int i = 0; i < 3796; i++) PhotonNetwork.NetworkingClient.LoadBalancingPeer.OpRaiseEvent(202, new ExitGames.Client.Photon.Hashtable(), new RaiseEventOptions { TargetActors = new int[] { player.Creator.ActorNumber } }, SendOptions.SendUnreliable);
             PhotonNetwork.NetworkingClient.LoadBalancingPeer.SendOutgoingCommands();
             if (!bypassDelay) delay = Time.time + 8.5f;
         }
+
         public static void StutterPlayer(VRRig player, bool bypassDelay = false)
         {
             if (!bypassDelay && Time.time <= delay) return;
-            for (int i = 0; i < 1200; i++) PhotonNetwork.NetworkingClient.LoadBalancingPeer.OpRaiseEvent(3, new ExitGames.Client.Photon.Hashtable(), new RaiseEventOptions { TargetActors = new int[] { player.Creator.ActorNumber } }, SendOptions.SendUnreliable);
+            for (int i = 0; i < 1200; i++) PhotonNetwork.NetworkingClient.LoadBalancingPeer.OpRaiseEvent(202, new ExitGames.Client.Photon.Hashtable(), new RaiseEventOptions { TargetActors = new int[] { player.Creator.ActorNumber } }, SendOptions.SendUnreliable);
             PhotonNetwork.NetworkingClient.LoadBalancingPeer.SendOutgoingCommands();
             if (!bypassDelay) delay = Time.time + 5f;
         }
@@ -886,8 +1254,8 @@ namespace Juul
                 }
             }
         }
-      
-        
+
+
         public static List<Player> GetAllJUULUsers()
         {
             List<Player> juulUsers = new List<Player>();
@@ -936,6 +1304,18 @@ namespace Juul
         {
             try
             {
+                if (IsLocalPlayerGuardian() && (ControllerInputPoller.instance.rightGrab || ControllerInputPoller.instance.leftGrab))
+                {
+                    foreach (VRRig vrrig in VRRigCache.ActiveRigs)
+                    {
+                        if (vrrig != null && !vrrig.isMyPlayer && !vrrig.isOfflineVRRig)
+                        {
+                            Vector3 handPosition = GunLib.gunLeft ? GorillaTagger.Instance.leftHandTransform.position : GorillaTagger.Instance.rightHandTransform.position;
+                            LineLib.DrawLine(handPosition, vrrig.transform.position, GunLib.LineColor, 0.005f);
+                        }
+                    }
+                }
+
                 GunLib.StartPointerSystem(() =>
                 {
                     try
@@ -1030,7 +1410,7 @@ namespace Juul
                         if (netView != null)
                         {
                             Vector3 groundPosition = vrrig.transform.position;
-                            groundPosition.y = -10f; 
+                            groundPosition.y = -10f;
 
                             netView.SendRPC("GrabbedByPlayer", RpcTarget.Others, new object[] { true, false, false });
                             netView.SendRPC("DroppedByPlayer", RpcTarget.Others, new object[] { (groundPosition - vrrig.transform.position) * 100f });
@@ -1501,28 +1881,131 @@ namespace Juul
 
             lastPaintballShot = Time.time;
         }
+        private static bool _grabSafetyEnabled = false;
 
+        private static void EnableGrabSafety()
+        {
+            if (_grabSafetyEnabled) return;
+            _grabSafetyEnabled = true;
+            
+            try { Safety.DisableMapTriggers(); } catch { }
+            try { Safety.DisableNetworkTriggers(); } catch { }
+            try { Safety.DisableQuitBox(); } catch { }
+        }
 
+        private static void DisableGrabSafety()
+        {
+            if (!_grabSafetyEnabled) return;
+            _grabSafetyEnabled = false;
+            
+            try { Safety.EnableMapTriggers(); } catch { }
+            try { Safety.EnableNetworkTriggers(); } catch { }
+            try { Safety.EnableQuitBox(); } catch { }
+        }
 
+        private static float _nextGrabTime;
 
+        private static bool CheckHandLinks(VRRig monkey)
+        {
+            if (monkey == null) return false;
+            return monkey.leftHandLink.CanBeGrabbed() || monkey.rightHandLink.CanBeGrabbed();
+        }
 
+        private static void UpdateGrabStatus(bool isActive)
+        {
+            Juul.Patches.GrabPatches.GrabPatch.enabled = isActive;
+            if (!isActive && !VRRig.LocalRig.enabled)
+            {
+                VRRig.LocalRig.enabled = true;
+            }
+        }
 
+        public static void GrabFlingGun()
+        {
+            foreach (VRRig rig in VRRigCache.ActiveRigs)
+            {
+                if (rig == null || rig.isMyPlayer || rig.isOfflineVRRig) continue;
+                if (CheckHandLinks(rig))
+                {
+                    if (!Inputs.RightTrigger)
+                    {
+                        Vector3 myPos = GorillaTagger.Instance.offlineVRRig.transform.position;
+                        Vector3 theirPos = rig.transform.position;
+                        LineLib.DrawLine(myPos, theirPos, Color.green, 0.005f);
+                    }
+                }
+            }
 
+            GunLib.StartPointerSystem(() =>
+            {
+                float randX = UnityEngine.Random.Range(0, 2) == 0 ? -95000f : 95000f;
+                float randZ = UnityEngine.Random.Range(0, 2) == 0 ? -95000f : 95000f;
+                ForceGrabThingy(GunLib.LockedPlayer, new Vector3(randX, 95000f, randZ));
+            }, true);
 
+            bool noInput = !Inputs.RightGrip && !Inputs.LeftGrip && !Inputs.RightTrigger && !Inputs.LeftTrigger;
+            if (noInput && Juul.Patches.GrabPatches.GrabPatch.enabled)
+            {
+                UpdateGrabStatus(false);
+                VRRig.LocalRig.BreakHandLinks();
+                VRRig.LocalRig.enabled = true;
+            }
+        }
 
+        public static void GrabFlingAll()
+        {
+            foreach (VRRig rig in VRRigCache.ActiveRigs)
+            {
+                if (rig == null || rig.isMyPlayer || rig.isOfflineVRRig) continue;
+                if (!CheckHandLinks(rig)) continue;
 
+                float randX = UnityEngine.Random.Range(0, 2) == 0 ? -95000f : 95000f;
+                float randZ = UnityEngine.Random.Range(0, 2) == 0 ? -95000f : 95000f;
+                ForceGrabThingy(rig, new Vector3(randX, 95000f, randZ));
+            }
 
+            bool noInput = !Inputs.RightGrip && !Inputs.LeftGrip && !Inputs.RightTrigger && !Inputs.LeftTrigger;
+            if (noInput && Juul.Patches.GrabPatches.GrabPatch.enabled)
+            {
+                UpdateGrabStatus(false);
+                VRRig.LocalRig.BreakHandLinks();
+                VRRig.LocalRig.enabled = true;
+            }
+        }
 
+        private static void ForceGrabThingy(VRRig target, Vector3 tpTarget)
+        {
+            if (target == null || target.isLocal) return;
 
+            if (!CheckHandLinks(target))
+            {
+                UpdateGrabStatus(false);
+                VRRig.LocalRig.BreakHandLinks();
+                VRRig.LocalRig.enabled = true;
+                return;
+            }
 
+            UpdateGrabStatus(true);
+            VRRig.LocalRig.enabled = false;
+            VRRig.LocalRig.transform.position = tpTarget;
 
+            bool preferLeft = target.leftHandLink.CanBeGrabbed();
+            TakeMyHand_HandLink theirHand = preferLeft ? target.leftHandLink : target.rightHandLink;
+            TakeMyHand_HandLink ourHand = preferLeft ? VRRig.LocalRig.leftHandLink : VRRig.LocalRig.rightHandLink;
 
+            if (theirHand.grabbedPlayer == NetworkSystem.Instance.LocalPlayer) return;
 
+            if (_nextGrabTime <= 0f)
+            {
+                _nextGrabTime = theirHand.rejectGrabsUntilTimestamp > Time.time ? theirHand.rejectGrabsUntilTimestamp : Time.time + 0.2f;
+            }
 
+            if (Time.time <= _nextGrabTime) return;
 
+            VRRig.LocalRig.transform.position = target.syncPos;
+            ourHand.TentacleTryCreateLink(theirHand);
 
-
-
+            _nextGrabTime = theirHand.rejectGrabsUntilTimestamp > Time.time ? theirHand.rejectGrabsUntilTimestamp : Time.time + 0.2f;
+        }
     }
 }
-

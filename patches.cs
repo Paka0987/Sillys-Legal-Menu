@@ -1,3 +1,4 @@
+using GorillaLocomotion;
 using GorillaNetworking;
 using HarmonyLib;
 using JetBrains.Annotations;
@@ -12,6 +13,8 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using Random = UnityEngine.Random;
+using ExitGames.Client.Photon;
+using GorillaExtensions;
 
 namespace Juul
 {
@@ -166,10 +169,188 @@ namespace Juul
                 private static bool Prefix(PhotonMessageInfoWrapped infoWrapped, string rpcFunction) =>
                     false;
             }
+
+            [HarmonyPatch(typeof(PhotonNetwork), nameof(PhotonNetwork.OnEvent))]
+            internal class BlockScoreBoardReports
+            {
+                static bool Prefix(EventData photonEvent)
+                {
+                    if (photonEvent.Code == 50)
+                        if (((object[])photonEvent.CustomData)[0] == PhotonNetwork.LocalPlayer.UserId)
+                            return false;
+                        else return true;
+                    else
+                        return true;
+                }
+            }
+
+            [HarmonyPatch(typeof(MothershipClientApiUnity), nameof(MothershipClientApiUnity.CreateReport))]
+            internal class BlockUnityAAReports
+            {
+                static bool Prefix(string reportedUserId, int category, bool moddedClient, string metadata, Action<CreateReportResponse> successAction, Action<MothershipError, int> errorAction) => false;
+            }
+
+            [HarmonyPatch(typeof(MothershipApiPINVOKE), nameof(MothershipApiPINVOKE.MothershipClientApiClient_CreateReport))]
+            internal class PatchCreateReport
+            {
+                private static bool Prefix()
+                {
+                    return false;
+                }
+            }
+
+            [HarmonyPatch(typeof(MothershipApiPINVOKE), nameof(MothershipApiPINVOKE.MothershipServerApiClient_ServerCreateBan))]
+            internal class PatchServerCreateBan
+            {
+                private static bool Prefix()
+                {
+                    return false;
+                }
+            }
+
+            [HarmonyPatch(typeof(MothershipApiPINVOKE), nameof(MothershipApiPINVOKE.MothershipAutomationApiClient_CreateBan))]
+            internal class PatchAutomationCreateBan
+            {
+                private static bool Prefix()
+                {
+                    return false;
+                }
+            }
+
+            [HarmonyPatch(typeof(MothershipApiPINVOKE), nameof(MothershipApiPINVOKE.new_CreateReportRequest))]
+            internal class PatchNewCreateReportRequest
+            {
+                private static bool Prefix()
+                {
+                    return false;
+                }
+            }
+
+            [HarmonyPatch(typeof(MothershipApiPINVOKE), nameof(MothershipApiPINVOKE.CreateReportRequest_ToHttpRequest))]
+            internal class PatchCreateReportToHttpRequest
+            {
+                private static bool Prefix()
+                {
+                    return false;
+                }
+            }
+
+            [HarmonyPatch(typeof(MothershipApiPINVOKE), nameof(MothershipApiPINVOKE.new_ServerCreateBanRequest))]
+            internal class PatchNewServerCreateBanRequest
+            {
+                private static bool Prefix()
+                {
+                    return false;
+                }
+            }
+
+            [HarmonyPatch(typeof(MothershipApiPINVOKE), nameof(MothershipApiPINVOKE.ServerCreateBanRequest_ToHttpRequest))]
+            internal class PatchServerCreateBanToHttpRequest
+            {
+                private static bool Prefix()
+                {
+                    return false;
+                }
+            }
+
+            [HarmonyPatch(typeof(MothershipApiPINVOKE), nameof(MothershipApiPINVOKE.new_CreateBanRequest))]
+            internal class PatchNewCreateBanRequest
+            {
+                private static bool Prefix()
+                {
+                    return false;
+                }
+            }
+
+            [HarmonyPatch(typeof(MothershipApiPINVOKE), nameof(MothershipApiPINVOKE.CreateBanRequest_ToHttpRequest))]
+            internal class PatchCreateBanToHttpRequest
+            {
+                private static bool Prefix()
+                {
+                    return false;
+                }
+            }
         }
 
         public class GameplayPatches
         {
+            [HarmonyPatch(typeof(VRRig), nameof(VRRig.UpdateFriendshipBracelet))]
+            public class BraceletPatch
+            {
+                public static bool enabled;
+
+                public static bool Prefix(VRRig __instance) =>
+                    !enabled;
+            }
+
+            [HarmonyPatch(typeof(VRRig), nameof(VRRig.SetHandEffectData))]
+            public class EffectDataPatch
+            {
+                public static bool enabled;
+                public static bool tapsEnabled = true;
+                public static bool doOverride;
+                public static float overrideVolume = 99999f;
+                public static int tapMultiplier = 1;
+                public static int material = -1;
+
+                private static bool Prefix(VRRig __instance, HandEffectContext effectContext, int audioClipIndex, bool isDownTap, bool isLeftHand, float handTapVolume, float handTapSpeed, Vector3 dirFromHitToHand)
+                {
+                    if (enabled)
+                    {
+                        if (__instance.isLocal)
+                        {
+                            if (doOverride)
+                            {
+                                effectContext.soundFX = VRRig.LocalRig.GetHandSurfaceData(audioClipIndex).audio;
+                                effectContext.speed = overrideVolume;
+                                effectContext.soundVolume = overrideVolume;
+
+                                if (PhotonNetwork.InRoom)
+                                {
+                                    if (tapMultiplier > 1)
+                                    {
+                                        for (int i = 0; i < tapMultiplier; i++)
+                                        {
+                                            GorillaTagger.Instance.myVRRig.SendRPC("RPC_PlayHandTap", RpcTarget.All, audioClipIndex, isLeftHand, handTapSpeed);
+                                        }
+                                    }
+                                }
+
+                                return false;
+                            }
+
+                            if (!tapsEnabled)
+                            {
+                                effectContext.speed = 0f;
+                                effectContext.soundVolume = 0f;
+
+                                GorillaTagger.Instance.handTapVolume = 0f;
+                                GorillaTagger.Instance.handTapSpeed = 0f;
+                                GorillaTagger.Instance.audioClipIndex = -1;
+
+                                return false;
+                            }
+
+                            if (material > 0)
+                            {
+                                GorillaTagger.Instance.audioClipIndex = material;
+                                audioClipIndex = material;
+
+                                if (isLeftHand)
+                                    GTPlayer.Instance.leftHand.materialTouchIndex = material;
+                                else
+                                    GTPlayer.Instance.rightHand.materialTouchIndex = material;
+
+                                effectContext.soundFX = VRRig.LocalRig.GetHandSurfaceData(material).audio;
+
+                                return false;
+                            }
+                        }
+                    }
+                    return true;
+                }
+            }
+
             [HarmonyPatch(typeof(VRRig), "IsPositionInRange")]
             public class IsPositionInRangePatch
             {
@@ -231,23 +412,25 @@ namespace Juul
                 }
             }
 
-            [HarmonyPatch(typeof(GorillaLocomotion.GTPlayer), "AntiTeleportTechnology", MethodType.Normal)]
+            /*[HarmonyPatch(typeof(GorillaLocomotion.GTPlayer), "AntiTeleportTechnology", MethodType.Normal)]
             public class AntiTeleportTechnologyPatch
             {
                 static bool Prefix()
                 {
                     return false;
                 }
-            }
+            }*/
 
             [HarmonyPatch(typeof(GameObject), "CreatePrimitive", MethodType.Normal)]
             public class CreatePrimitivePatch
             {
+                private static Shader uberShader;
                 public static void Postfix(GameObject __result)
                 {
                     if (__result.GetComponent<Renderer>() != null)
                     {
-                        __result.GetComponent<Renderer>().material.shader = Shader.Find("GorillaTag/UberShader");
+                        if (uberShader == null) uberShader = Shader.Find("GorillaTag/UberShader");
+                        __result.GetComponent<Renderer>().material.shader = uberShader;
                     }
                 }
             }
@@ -431,47 +614,21 @@ namespace Juul
             }
 
             public static bool enabled = true;
-
-            [HarmonyPatch(typeof(VRRig), nameof(VRRig.PostTick))]  // from seralyth, i didnt feel like making my own/finding a way around it
-            public class TorsoPatch
-            {
-                public static event Action VRRigLateUpdate;
-                public static bool enabled;
-                public static int mode = 0;
-
-                public static void Postfix(VRRig __instance)
-                {
-                    if (__instance.isLocal)
-                    {
-                        if (enabled)
-                        {
-                            Quaternion rotation = Quaternion.identity;
-                            switch (mode)
-                            {
-                                case 0:
-                                    rotation = Quaternion.Euler(0f, Time.time * 180f % 360, 0f);
-                                    break;
-                                case 1:
-                                    rotation = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
-                                    break;
-                                case 2:
-                                    rotation = Quaternion.Euler(0f, GorillaTagger.Instance.headCollider.transform.rotation.eulerAngles.y + 180f, 0f);
-                                    break;
-                            }
-
-                            __instance.transform.rotation = rotation;
-                            __instance.head.MapMine(__instance.scaleFactor, __instance.playerOffsetTransform);
-                            __instance.leftHand.MapMine(__instance.scaleFactor, __instance.playerOffsetTransform);
-                            __instance.rightHand.MapMine(__instance.scaleFactor, __instance.playerOffsetTransform);
-                        }
-
-                        VRRigLateUpdate?.Invoke();
-                    }
-                }
-            }
         
            
         }
+        public class GrabPatches
+        {
+            [HarmonyPatch(typeof(GTPlayer), nameof(GTPlayer.TakeMyHand_ProcessMovement))]
+            public class GrabPatch
+            {
+                public static bool enabled;
+
+                public static bool Prefix(GTPlayer __instance) => !enabled;
+            }
+        }
+
+        
     }
 }
 

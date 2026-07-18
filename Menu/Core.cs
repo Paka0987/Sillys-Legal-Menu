@@ -114,104 +114,6 @@ namespace Juul
 
 
 
-        public static Font Arial = Font.CreateDynamicFontFromOSFont("Arial", 14);
-        public static Font Verdana = Font.CreateDynamicFontFromOSFont("Verdana", 14);
-        public static Font SFPro = Font.CreateDynamicFontFromOSFont("SF Pro", 14);
-        public static Font Consolas = Font.CreateDynamicFontFromOSFont("Consolas", 14);
-        public static Font Impact = Font.CreateDynamicFontFromOSFont("Impact", 14);
-        public static Font ComicSans = Font.CreateDynamicFontFromOSFont("Comic Sans MS", 14);
-        public static Font TimesNewRoman = Font.CreateDynamicFontFromOSFont("Times New Roman", 14);
-        public static Font Georgia = Font.CreateDynamicFontFromOSFont("Georgia", 14);
-        public static Font CourierNew = Font.CreateDynamicFontFromOSFont("Courier New", 14);
-        public static Font Tahoma = Font.CreateDynamicFontFromOSFont("Tahoma", 14);
-        public static Font Trebuchet = Font.CreateDynamicFontFromOSFont("Trebuchet MS", 14);
-        public static Font Lucida = Font.CreateDynamicFontFromOSFont("Lucida Console", 14);
-        public static Font SegoeUI = Font.CreateDynamicFontFromOSFont("Segoe UI", 14);
-        public static Font Roboto = Font.CreateDynamicFontFromOSFont("Roboto", 14);
-        public static Font OpenSans = Font.CreateDynamicFontFromOSFont("Open Sans", 14);
-
-        public static int FontValue = 0;
-
-        public static Font[] FontList = new Font[]
-        {
-            Verdana,  
-            Arial,
-            SFPro,
-            Consolas,
-            Impact,
-            ComicSans,
-            TimesNewRoman,
-            Georgia,
-            CourierNew,
-            Tahoma,
-            Trebuchet,
-            Lucida,
-            SegoeUI,
-            Roboto,
-            OpenSans
-        };
-
-        public static string[] FontNames = new string[]
-        {
-            "Verdana",
-            "Arial",
-            "SF Pro",
-            "Consolas",
-            "Impact",
-            "Comic Sans MS",
-            "Times New Roman",
-            "Georgia",
-            "Courier New",
-            "Tahoma",
-            "Trebuchet MS",
-            "Lucida Console",
-            "Segoe UI",
-            "Roboto",
-            "Open Sans"
-        };
-        public static string GetCurrentFontName()
-        {
-            return FontNames[FontValue];
-        }
-        public static void ChangeFont(bool forward)
-        {
-            if (forward && FontValue >= (FontList.Length - 1))
-                FontValue = 0;
-            else if (!forward && FontValue <= 0)
-                FontValue = (FontList.Length - 1);
-            else
-                FontValue = FontValue + (forward ? 1 : -1);
-            MenuFont = FontList[FontValue];
-
-            if (ExtraButtons.FontButton != null)
-                ExtraButtons.FontButton.Name = $"Font: {GetCurrentFontName()}";
-            RebuildMenu();
-            PlayerPrefs.SetInt("JuulFonts", FontValue);
-            PlayerPrefs.Save();
-        }
-
-        public static void SetFont(int value)
-        {
-            FontValue = Mathf.Clamp(value, 0, FontList.Length - 1);
-            MenuFont = FontList[FontValue];
-            if (ExtraButtons.FontButton != null)
-                ExtraButtons.FontButton.Name = $"Font: {GetCurrentFontName()}";
-            RebuildMenu();
-            PlayerPrefs.SetInt("JuulFont", FontValue);
-            PlayerPrefs.Save();
-        }
-        public static void LoadFontPreference()
-        {
-            if (PlayerPrefs.HasKey("JuulFont"))
-            {
-                int savedFont = PlayerPrefs.GetInt("JuulFont");
-                if (savedFont >= 0 && savedFont < FontList.Length)
-                {
-                    FontValue = savedFont;
-                    MenuFont = FontList[FontValue];
-                }
-            }
-        }
 
         public static void ChangeMenuSmoothingSpeed(bool up)
         {
@@ -236,7 +138,7 @@ namespace Juul
         public static bool MenuStart = false;
         public static bool IsMenuOpen = false;
         public static bool IsRightHanded = false;
-        public static Font MenuFont = Verdana;
+        public static Font MenuFont = Font.CreateDynamicFontFromOSFont("Verdana", 14);
         public static float OffBrightness = 0.5f;
         public static float OnBrightness = 0.33f;
         public static int ThemeValue = 0;
@@ -356,9 +258,9 @@ namespace Juul
         public static Vector3 ServerSyncRightHandPos;
         public static void OnSerialize()
         {
-            ServerSyncPos = VRRig.LocalRig?.transform.position ?? ServerSyncPos;
-            ServerSyncLeftHandPos = VRRig.LocalRig?.leftHand?.rigTarget?.transform.position ?? ServerSyncLeftHandPos;
-            ServerSyncRightHandPos = VRRig.LocalRig?.rightHand?.rigTarget?.transform.position ?? ServerSyncRightHandPos;
+            ServerSyncPos = GorillaTagger.Instance?.headCollider?.transform.position ?? ServerSyncPos;
+            ServerSyncLeftHandPos = GorillaTagger.Instance?.leftHandTransform?.position ?? ServerSyncLeftHandPos;
+            ServerSyncRightHandPos = GorillaTagger.Instance?.rightHandTransform?.position ?? ServerSyncRightHandPos;
         }
         public static bool inroomrel = false;
         private static readonly Dictionary<string, GameObject> objectPool = new Dictionary<string, GameObject>();
@@ -414,23 +316,30 @@ namespace Juul
                 1 << LayerMask.NameToLayer("GorillaParticle"));
             return noInvisLayerMask ?? GTPlayer.Instance.locomotionEnabledLayers;
         }
+        private static Renderer otherBoardRen;
         public static void GetOtherBoards()
         {
-            var treeRoom = GameObject.Find("Environment Objects/LocalObjects_Prefab/TreeRoom");
-            if (treeRoom == null) return;
-            var stumpChildren = treeRoom.transform
-                .Cast<Transform>()
-                .Where(x => x.name.Contains("UnityTempFile"))
-                .ToList();
-            if (stumpChildren.Count <= 3) return;
-            Renderer ren = stumpChildren[3].GetComponent<Renderer>();
-            if (ren == null) return;
-            if (!_origOtherBoardMats.ContainsKey(ren))
-                _origOtherBoardMats[ren] = ren.material;
+            if (otherBoardRen == null)
+            {
+                var treeRoom = GameObject.Find("Environment Objects/LocalObjects_Prefab/TreeRoom");
+                if (treeRoom == null) return;
+                int count = 0;
+                foreach (Transform child in treeRoom.transform)
+                {
+                    if (child.name.Contains("UnityTempFile"))
+                    {
+                        if (count == 3) { otherBoardRen = child.GetComponent<Renderer>(); break; }
+                        count++;
+                    }
+                }
+            }
+            if (otherBoardRen == null) return;
+            if (!_origOtherBoardMats.ContainsKey(otherBoardRen))
+                _origOtherBoardMats[otherBoardRen] = otherBoardRen.material;
             if (IsBoardGradientEnabled && BoardMat != null)
-                ren.material = BoardMat;
-            else if (!IsBoardGradientEnabled && _origOtherBoardMats.ContainsKey(ren))
-                ren.material = _origOtherBoardMats[ren];
+                otherBoardRen.material = BoardMat;
+            else if (!IsBoardGradientEnabled && _origOtherBoardMats.ContainsKey(otherBoardRen))
+                otherBoardRen.material = _origOtherBoardMats[otherBoardRen];
         }
         public static void ChangeMapInfoText()
         {
@@ -480,6 +389,7 @@ namespace Juul
             cocBody = null;
             monitorScreen = null;
             wallMonitor = null;
+            otherBoardRen = null;
         }
         private static string _lastSpinner = "";
         public static void Boards()
@@ -589,9 +499,19 @@ namespace Juul
             }
 
             if (VRRig.LocalRig == null) return;
-            ServerPos = ServerPos == Vector3.zero ? ServerSyncPos : Vector3.Lerp(ServerPos, VRRig.LocalRig.SanitizeVector3(ServerSyncPos), VRRig.LocalRig.lerpValueBody * 0.66f);
-            ServerLeftHandPos = ServerLeftHandPos == Vector3.zero ? ServerSyncLeftHandPos : Vector3.Lerp(ServerLeftHandPos, VRRig.LocalRig.SanitizeVector3(ServerSyncLeftHandPos), VRRig.LocalRig.lerpValueBody);
-            ServerRightHandPos = ServerRightHandPos == Vector3.zero ? ServerSyncRightHandPos : Vector3.Lerp(ServerRightHandPos, VRRig.LocalRig.SanitizeVector3(ServerSyncRightHandPos), VRRig.LocalRig.lerpValueBody);
+            if (MenuSmoothing)
+            {
+                float lerpSpeed = MenuSmoothingSpeed * Time.deltaTime;
+                ServerPos = ServerPos == Vector3.zero ? ServerSyncPos : Vector3.Lerp(ServerPos, ServerSyncPos, lerpSpeed);
+                ServerLeftHandPos = ServerLeftHandPos == Vector3.zero ? ServerSyncLeftHandPos : Vector3.Lerp(ServerLeftHandPos, ServerSyncLeftHandPos, lerpSpeed);
+                ServerRightHandPos = ServerRightHandPos == Vector3.zero ? ServerSyncRightHandPos : Vector3.Lerp(ServerRightHandPos, ServerSyncRightHandPos, lerpSpeed);
+            }
+            else
+            {
+                ServerPos = ServerSyncPos;
+                ServerLeftHandPos = ServerSyncLeftHandPos;
+                ServerRightHandPos = ServerSyncRightHandPos;
+            }
             if (PhotonNetwork.InRoom && !inroomrel)
             {
                 inroomrel = true;
@@ -663,7 +583,7 @@ namespace Juul
                         float initDist = isSearchingActiveOpen ? 1.0f : 0.6f;
                         Vector3 normalTargetPos = TPC.transform.position + TPC.transform.forward * initDist;
                         float flipAngle = pcFlipped ? 180f : 0f;
-                        Quaternion normalTargetRot = Quaternion.LookRotation(TPC.transform.position - normalTargetPos) * Quaternion.Euler(0f, flipAngle, 0f) * Quaternion.Euler(-90f, 0f, -90f);
+                        Quaternion normalTargetRot = Quaternion.LookRotation(TPC.transform.position - normalTargetPos, TPC.transform.up) * Quaternion.Euler(0f, flipAngle, 0f) * Quaternion.Euler(-90f, 0f, -90f);
                         Menu.transform.position = normalTargetPos;
                         Menu.transform.rotation = normalTargetRot;
                     }
@@ -718,7 +638,7 @@ namespace Juul
                         float zoomDist = isSearchingActive ? 1.0f : 0.6f;
                         Vector3 targetPos = TPC.transform.position + TPC.transform.forward * zoomDist;
                         float flipAngle = pcFlipped ? 180f : 0f;
-                        Quaternion targetRot = Quaternion.LookRotation(TPC.transform.position - targetPos) * Quaternion.Euler(0f, flipAngle, 0f) * Quaternion.Euler(-90f, 0f, -90f);
+                        Quaternion targetRot = Quaternion.LookRotation(TPC.transform.position - targetPos, TPC.transform.up) * Quaternion.Euler(0f, flipAngle, 0f) * Quaternion.Euler(-90f, 0f, -90f);
 
                         if (isSearchingActive && !(SearchManager.WasSearchingLastFrame || KeyboardManager.WasJoiningRoomLastFrame || ButtonConfigs.WasListeningLastFrame))
                         {
@@ -816,8 +736,11 @@ namespace Juul
                         if (!(SearchManager.WasSearchingLastFrame || KeyboardManager.WasJoiningRoomLastFrame || ButtonConfigs.WasListeningLastFrame) && GorillaTagger.Instance != null && GorillaTagger.Instance.headCollider != null)
                         {
                             Transform head = GorillaTagger.Instance.headCollider.transform;
-                            Vector3 targetPos = head.position + head.forward * 0.8f;
-                            Quaternion targetRot = Quaternion.LookRotation(head.position - targetPos) * Quaternion.Euler(0f, 0f, 0f) * Quaternion.Euler(-90f, 0f, -90f);
+                            Vector3 flatForward = head.forward;
+                            flatForward.y = 0f;
+                            flatForward.Normalize();
+                            Vector3 targetPos = head.position + flatForward * 0.8f;
+                            Quaternion targetRot = Quaternion.LookRotation(head.position - targetPos) * Quaternion.Euler(-90f, 0f, -90f);
 
                             if (Core.IsAnimated)
                             {
@@ -925,20 +848,13 @@ namespace Juul
                     IsMenuOpen = false;
                 }
             }
-            if (Buttons.Modules != null)
+            for (int i = ActiveButtons.Count - 1; i >= 0; i--)
             {
-                for (int i = 0; i < Buttons.Modules.Length; i++)
+                if (i < ActiveButtons.Count)
                 {
-                    Category category = Buttons.Modules[i];
-                    if (category == ExtraButtons.EnabledCategory) continue;
-                    List<Button> allButtons = new List<Button>();
-                    ExtraButtons.GetButtonsRecursive(category, allButtons);
-                    for (int j = 0; j < allButtons.Count; j++)
-                    {
-                        Button button = allButtons[j];
-                        if (button.Enabled)
-                            button.OnEnable();
-                    }
+                    Button btn = ActiveButtons[i];
+                    if (btn != null && btn.Enabled)
+                        btn.OnEnable?.Invoke();
                 }
             }
         }
@@ -2108,6 +2024,7 @@ namespace Juul
             public string buttonID = "";
             private Vector3 targetScale;
             private Renderer rend;
+            private Mesh clonedMesh;
             public Material cachedMaterial;
             private Texture2D gradientTexture;
             private Color[] pixels;
@@ -2127,7 +2044,8 @@ namespace Juul
                 MeshFilter mf = GetComponent<MeshFilter>();
                 if (mf != null && mf.sharedMesh != null)
                 {
-                    Mesh m = Instantiate(mf.sharedMesh);
+                    clonedMesh = Instantiate(mf.sharedMesh);
+                    Mesh m = clonedMesh;
                     Vector3[] verts = m.vertices;
                     Vector2[] uvs = m.uv;
                     Vector3 min = m.bounds.min;
@@ -2272,6 +2190,7 @@ namespace Juul
             }
             private void OnDestroy()
             {
+                if (clonedMesh != null) Destroy(clonedMesh);
                 if (gradientTexture != null) Destroy(gradientTexture);
                 if (cachedMaterial != null) Destroy(cachedMaterial);
             }

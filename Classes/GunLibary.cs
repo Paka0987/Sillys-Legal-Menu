@@ -715,15 +715,28 @@ namespace Juul
             if (ControllerInputPoller.instance.rightGrab)
             {
                 isLocked = false;
-                Physics.Raycast(GorillaTagger.Instance.rightHandTransform.position, -GorillaTagger.Instance.rightHandTransform.up, out raycastHit, 512f, NoInvisLayerMask());
+                
+                bool hitSomething = Physics.Raycast(GorillaTagger.Instance.rightHandTransform.position, -GorillaTagger.Instance.rightHandTransform.up, out raycastHit, 512f, NoInvisLayerMask());
+                
+                Vector3 targetPosition;
+                if (hitSomething)
+                {
+                    targetPosition = raycastHit.point;
+                }
+                else
+                {
+                    targetPosition = GorillaTagger.Instance.rightHandTransform.position + (-GorillaTagger.Instance.rightHandTransform.up * 512f);
+                }
+                
                 if (spherepointer == null)
                 {
-                    spherepointer = LineLib.CreateSphere(raycastHit.point, SphereSize, LineColor, true);
+                    spherepointer = LineLib.CreateSphere(targetPosition, SphereSize, LineColor, true);
                     lr = GorillaTagger.Instance.offlineVRRig.rightHandTransform.position;
                 }
+                
                 if (LockedPlayer == null)
                 {
-                    spherepointer.transform.position = raycastHit.point;
+                    spherepointer.transform.position = targetPosition;
                     spherepointer.GetComponent<Renderer>().material.color = LineColor;
                     isLocked = false;
                 }
@@ -742,11 +755,15 @@ namespace Juul
                 if (ControllerInputPoller.instance.rightControllerIndexFloat > 0.5f)
                 {
                     trigger = true;
-                    if (LockOn)
+                    if (LockOn && hitSomething)
                     {
                         if (LockedPlayer == null)
                         {
                             LockedPlayer = raycastHit.collider.GetComponentInParent<VRRig>();
+                            if (LockedPlayer != null && (LockedPlayer == GorillaTagger.Instance.offlineVRRig || LockedPlayer.isOfflineVRRig || LockedPlayer.isMyPlayer))
+                            {
+                                LockedPlayer = null;
+                            }
                         }
                         if (LockedPlayer != null)
                         {
@@ -785,15 +802,27 @@ namespace Juul
         {
             if (ControllerInputPoller.instance.leftGrab)
             {
-                Physics.Raycast(GorillaTagger.Instance.leftHandTransform.position, -GorillaTagger.Instance.leftHandTransform.up, out raycastHit, 512f, NoInvisLayerMask());
+                bool hitSomething = Physics.Raycast(GorillaTagger.Instance.leftHandTransform.position, -GorillaTagger.Instance.leftHandTransform.up, out raycastHit, 512f, NoInvisLayerMask());
+                
+                Vector3 targetPosition;
+                if (hitSomething)
+                {
+                    targetPosition = raycastHit.point;
+                }
+                else
+                {
+                    targetPosition = GorillaTagger.Instance.leftHandTransform.position + (-GorillaTagger.Instance.leftHandTransform.up * 512f);
+                }
+                
                 if (spherepointer == null)
                 {
-                    spherepointer = LineLib.CreateSphere(raycastHit.point, SphereSize, LineColor, true);
+                    spherepointer = LineLib.CreateSphere(targetPosition, SphereSize, LineColor, true);
                     lr = GorillaTagger.Instance.offlineVRRig.leftHandTransform.position;
                 }
+                
                 if (LockedPlayer == null)
                 {
-                    spherepointer.transform.position = raycastHit.point;
+                    spherepointer.transform.position = targetPosition;
                     spherepointer.GetComponent<Renderer>().material.color = LineColor;
                 }
                 else
@@ -811,11 +840,15 @@ namespace Juul
                 if (ControllerInputPoller.instance.leftControllerIndexFloat > 0.5f)
                 {
                     trigger = true;
-                    if (LockOn)
+                    if (LockOn && hitSomething)
                     {
                         if (LockedPlayer == null)
                         {
                             LockedPlayer = raycastHit.collider.GetComponentInParent<VRRig>();
+                            if (LockedPlayer != null && (LockedPlayer == GorillaTagger.Instance.offlineVRRig || LockedPlayer.isOfflineVRRig || LockedPlayer.isMyPlayer))
+                            {
+                                LockedPlayer = null;
+                            }
                         }
                         if (LockedPlayer != null)
                         {
@@ -846,23 +879,36 @@ namespace Juul
             }
         }
 
+        private static GameObject cachedShoulderCamera;
+        private static GameObject CachedShoulderCamera => cachedShoulderCamera == null ? (cachedShoulderCamera = GameObject.Find("Shoulder Camera")) : cachedShoulderCamera;
+
         public static void StartPcGun(Action action, bool LockOn)
         {
-            Ray ray = GameObject.Find("Shoulder Camera").activeSelf ? GameObject.Find("Shoulder Camera").GetComponent<Camera>().ScreenPointToRay(UnityInput.Current.mousePosition) : GorillaTagger.Instance.mainCamera.GetComponent<Camera>().ScreenPointToRay(UnityInput.Current.mousePosition);
+            Ray ray = CachedShoulderCamera != null && CachedShoulderCamera.activeSelf ? CachedShoulderCamera.GetComponent<Camera>().ScreenPointToRay(UnityInput.Current.mousePosition) : GorillaTagger.Instance.mainCamera.GetComponent<Camera>().ScreenPointToRay(UnityInput.Current.mousePosition);
             if (Mouse.current.rightButton.isPressed)
             {
                 RaycastHit raycastHit;
-                if (Physics.Raycast(ray.origin, ray.direction, out raycastHit, 512f, NoInvisLayerMask()) && spherepointer == null)
+                bool hitSomething = Physics.Raycast(ray.origin, ray.direction, out raycastHit, 512f, NoInvisLayerMask());
+                
+                Vector3 targetPosition;
+                if (hitSomething)
                 {
-                    if (spherepointer == null)
-                    {
-                        spherepointer = LineLib.CreateSphere(raycastHit.point, SphereSize, LineColor, true);
-                        lr = GorillaTagger.Instance.offlineVRRig.rightHandTransform.position;
-                    }
+                    targetPosition = raycastHit.point;
                 }
+                else
+                {
+                    targetPosition = ray.origin + (ray.direction * 512f);
+                }
+                
+                if (spherepointer == null)
+                {
+                    spherepointer = LineLib.CreateSphere(targetPosition, SphereSize, LineColor, true);
+                    lr = GorillaTagger.Instance.offlineVRRig.rightHandTransform.position;
+                }
+                
                 if (LockedPlayer == null)
                 {
-                    spherepointer.transform.position = raycastHit.point;
+                    spherepointer.transform.position = targetPosition;
                     spherepointer.GetComponent<Renderer>().material.color = LineColor;
                 }
                 else
@@ -880,11 +926,15 @@ namespace Juul
                 if (Mouse.current.leftButton.isPressed)
                 {
                     trigger = true;
-                    if (LockOn)
+                    if (LockOn && hitSomething)
                     {
                         if (LockedPlayer == null)
                         {
                             LockedPlayer = raycastHit.collider.GetComponentInParent<VRRig>();
+                            if (LockedPlayer != null && (LockedPlayer == GorillaTagger.Instance.offlineVRRig || LockedPlayer.isOfflineVRRig || LockedPlayer.isMyPlayer))
+                            {
+                                LockedPlayer = null;
+                            }
                         }
                         if (LockedPlayer != null)
                         {
