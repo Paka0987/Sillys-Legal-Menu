@@ -1,2 +1,2 @@
-THIS IS THE OFFICIAL MENU, you can find the .DLL download in the Official Juul discord server
- Discord invite: https://discord.gg/juul
+THIS IS THE OFFICIAL MENU, Newer versions are CLOSED SOURCE, Join the Discord to use the Newer version in game :)
+Discord invite: https://discord.gg/juul
